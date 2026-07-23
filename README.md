@@ -35,6 +35,7 @@ node-graph canvas.
 - **"By Type" view** — toggle to a flat grouping, one collapsible group per
   component type across the whole file (all regions, all buttons, etc.) —
   useful for scanning composition rather than structure.
+- **Graph view** — a third toggle state: the same structure and edges (containment, reference, navigation) as boxes-and-wires on a pannable/zoomable canvas, for anyone who wants the visual node-graph layout instead of (or alongside) the tree.
 - **Breadcrumbs + keyboard nav** — the detail panel shows a clickable
   root-to-node breadcrumb trail; arrow keys navigate the tree using
   standard tree-widget semantics (Up/Down move between visible rows,

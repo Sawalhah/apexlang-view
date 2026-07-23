@@ -58,6 +58,115 @@ html, body {
   height: calc(100% - 34px);
   overflow: auto;
   padding: 4px 0;
+  position: relative;
+}
+
+/* Graph (canvas) view — an alternate view alongside Tree/By Type. Native
+   scroll is replaced with manual pan/zoom here, so overflow must be hidden
+   (the SVG is positioned via a CSS transform, not scrolled into place). */
+#graph-root.canvas-mode {
+  overflow: hidden;
+  padding: 0;
+  cursor: grab;
+}
+
+#graph-root.canvas-mode.dragging {
+  cursor: grabbing;
+}
+
+#graph-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.edge-path {
+  fill: none;
+  stroke: var(--vscode-foreground, #7a8aa0);
+  stroke-opacity: 0.3;
+  stroke-width: 2;
+}
+
+.ref-edge-path {
+  fill: none;
+  stroke: var(--cat-interactive);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  stroke-opacity: 0.8;
+}
+
+.nav-edge-path {
+  fill: none;
+  stroke: var(--cat-structural);
+  stroke-width: 2;
+  stroke-dasharray: 6 3;
+  stroke-opacity: 0.85;
+}
+
+.ref-arrow-head { fill: var(--cat-interactive); }
+.nav-arrow-head { fill: var(--cat-structural); }
+
+.gnode-rect {
+  fill: var(--vscode-editorWidget-background, #252526);
+  stroke: var(--vscode-widget-border, var(--vscode-panel-border, #444));
+  stroke-width: 1.5;
+  cursor: pointer;
+  transition: stroke 120ms ease-out;
+}
+
+.gnode:hover .gnode-rect {
+  stroke: var(--vscode-focusBorder, #4daafc);
+}
+
+.gnode.selected .gnode-rect {
+  stroke: var(--vscode-focusBorder, #4daafc);
+  stroke-width: 2.5;
+}
+
+.gnode.match .gnode-rect {
+  stroke: var(--vscode-charts-yellow, #f0c674);
+  stroke-width: 2.5;
+}
+
+.gnode.dimmed {
+  opacity: 0.25;
+}
+
+.gnode.external .gnode-rect {
+  stroke: var(--cat-structural);
+  stroke-dasharray: 4 2;
+}
+
+.gnode-icon {
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.gnode-icon.cat-structural { fill: var(--cat-structural); }
+.gnode-icon.cat-interactive { fill: var(--cat-interactive); }
+.gnode-icon.cat-logic { fill: var(--cat-logic); }
+.gnode-icon.cat-external { fill: var(--cat-external); }
+.gnode-icon.cat-neutral { fill: var(--cat-neutral); }
+
+.gnode-label {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--vscode-foreground, #ccc);
+  pointer-events: none;
+}
+
+.gnode-type {
+  font-size: 9px;
+  fill: var(--vscode-descriptionForeground, #999);
+  pointer-events: none;
+}
+
+.gnode-toggle {
+  font-size: 10px;
+  font-weight: 700;
+  fill: var(--vscode-descriptionForeground, #999);
+  cursor: pointer;
 }
 
 /* Category accents — 4 groups, not a color-per-type rainbow. Applied only

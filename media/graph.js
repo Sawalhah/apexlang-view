@@ -48,6 +48,18 @@
     return TYPE_CATEGORY[typeName] || 'neutral';
   }
 
+  // ---- Graph (canvas) view constants — SVG boxes-and-wires, an alternate
+  // view alongside Tree/By Type for anyone who wants the visual
+  // node-and-edge layout back. Shares all the same underlying state
+  // (currentGraph, collapsed, selectedNodeId) as the other two views.
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const NODE_W = 168;
+  const NODE_H = 46;
+  const H_GAP = 30;
+  const V_GAP = 84;
+  let view = { x: 0, y: 0, scale: 1 };
+  let svgEl = null;
+
   const treeRoot = document.getElementById('graph-root');
   const nodeCountEl = document.getElementById('node-count');
   const fileLabelEl = document.getElementById('file-label');
@@ -80,13 +92,16 @@
   // "how many regions/buttons/page items does this page have").
   let viewMode = 'tree';
 
+  const VIEW_MODES = ['tree', 'byType', 'graph'];
+  const VIEW_LABELS = { tree: 'View: Tree', byType: 'View: By Type', graph: 'View: Graph' };
   const viewToggleBtn = document.getElementById('view-toggle');
   viewToggleBtn.addEventListener('click', () => {
-    viewMode = viewMode === 'tree' ? 'byType' : 'tree';
-    viewToggleBtn.textContent = viewMode === 'tree' ? 'View: Tree' : 'View: By Type';
+    viewMode = VIEW_MODES[(VIEW_MODES.indexOf(viewMode) + 1) % VIEW_MODES.length];
+    viewToggleBtn.textContent = VIEW_LABELS[viewMode];
+    treeRoot.classList.toggle('canvas-mode', viewMode === 'graph');
     selectedNodeId = null;
     detailPanel.classList.add('hidden');
-    render();
+    render({ fit: true });
   });
 
   window.addEventListener('message', (event) => {
@@ -121,7 +136,11 @@
       } else {
         warningBanner.classList.add('hidden');
       }
-      render();
+      // Fit-to-view on a genuinely new file (Graph view's pan/zoom has no
+      // meaningful state yet); a live-edit refresh of the SAME file keeps
+      // whatever pan/zoom the user currently has, same reasoning as the
+      // original canvas view — resetting it on every keystroke was jarring.
+      render({ fit: isNewFile });
       return;
     }
   });
@@ -219,7 +238,7 @@
 
   document.getElementById('expand-all').addEventListener('click', () => {
     collapsed = new Set();
-    render();
+    render({ fit: true });
   });
   document.getElementById('collapse-all').addEventListener('click', () => {
     if (!currentGraph) return;
@@ -236,19 +255,21 @@
       if (!n.external) next.add(`type:${n.typeName}`);
     }
     collapsed = next;
-    render();
+    render({ fit: true });
   });
 
   // ---- Tree rendering (indented outline, like Page Designer's Rendering
   // tree / VS Code's own Explorer — no floating boxes, no canvas, no
   // pan/zoom. Only currently-visible rows are ever in the DOM.) ----
 
-  function render() {
+  function render(opts) {
     treeRoot.innerHTML = '';
     if (!currentGraph) return;
 
     if (viewMode === 'byType') {
       renderByType();
+    } else if (viewMode === 'graph') {
+      renderGraphView(!!(opts && opts.fit));
     } else {
       renderTree();
     }
@@ -293,6 +314,285 @@
     }
     treeRoot.appendChild(frag);
   }
+
+  // ---- Graph (canvas) view — SVG boxes-and-wires. Layout tree uses
+  // containment PLUS navigation edges (a nav-target stub is positioned as a
+  // visual child directly below its trigger); reference edges are drawn
+  // separately as cross-links once every node has a position. ----
+
+  function buildLayoutChildrenMap() {
+    const map = {};
+    for (const e of currentGraph.edges) {
+      const isNav = e.kind === 'navigation';
+      if (!isContainmentEdge(e) && !isNav) continue;
+      if (!map[e.from]) map[e.from] = [];
+      map[e.from].push(e.to);
+    }
+    return map;
+  }
+
+  function renderGraphView(fit) {
+    const byId = byIdMap();
+    const childrenOf = buildChildrenMap();
+    const layoutChildrenOf = buildLayoutChildrenMap();
+    const hasParent = new Set(currentGraph.edges.filter(isContainmentEdge).map((e) => e.to));
+    const roots = currentGraph.nodes.filter((n) => !hasParent.has(n.id) && !n.external);
+
+    const positions = {};
+    let nextX = 0;
+    const visiting = new Set();
+
+    function layout(nodeId, depth) {
+      if (visiting.has(nodeId)) {
+        positions[nodeId] = { x: nextX * (NODE_W + H_GAP), y: depth * V_GAP };
+        nextX += 1;
+        return;
+      }
+      visiting.add(nodeId);
+      const kids = (layoutChildrenOf[nodeId] || []).filter((id) => byId[id]);
+      const isCollapsed = collapsed.has(nodeId);
+      if (kids.length === 0 || isCollapsed) {
+        positions[nodeId] = { x: nextX * (NODE_W + H_GAP), y: depth * V_GAP };
+        nextX += 1;
+        visiting.delete(nodeId);
+        return;
+      }
+      const startX = nextX;
+      for (const kid of kids) layout(kid, depth + 1);
+      const endX = nextX;
+      const centerSlot = (startX + endX - 1) / 2;
+      positions[nodeId] = { x: centerSlot * (NODE_W + H_GAP), y: depth * V_GAP };
+      visiting.delete(nodeId);
+    }
+    for (const root of roots) layout(root.id, 0);
+
+    const MARGIN = 32;
+    for (const id in positions) {
+      positions[id].x += MARGIN;
+      positions[id].y += MARGIN;
+    }
+    let maxX = 0, maxY = 0;
+    for (const id in positions) {
+      maxX = Math.max(maxX, positions[id].x + NODE_W);
+      maxY = Math.max(maxY, positions[id].y + NODE_H);
+    }
+
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svgEl = svg;
+    svg.setAttribute('id', 'graph-svg');
+    svg.setAttribute('width', maxX + 40);
+    svg.setAttribute('height', maxY + 40);
+
+    const defs = document.createElementNS(SVG_NS, 'defs');
+    defs.innerHTML =
+      '<marker id="ref-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M 0 0 L 10 5 L 0 10 z" class="ref-arrow-head"/></marker>' +
+      '<marker id="nav-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">' +
+      '<path d="M 0 0 L 10 5 L 0 10 z" class="nav-arrow-head"/></marker>';
+    svg.appendChild(defs);
+
+    const edgesGroup = document.createElementNS(SVG_NS, 'g');
+    function visibleContainmentEdges() {
+      const out = [];
+      const seen = new Set();
+      function walk(nodeId) {
+        if (seen.has(nodeId)) return;
+        seen.add(nodeId);
+        if (collapsed.has(nodeId)) return;
+        for (const kid of childrenOf[nodeId] || []) {
+          if (!byId[kid]) continue;
+          out.push({ from: nodeId, to: kid });
+          walk(kid);
+        }
+      }
+      for (const r of roots) walk(r.id);
+      return out;
+    }
+    for (const e of visibleContainmentEdges()) {
+      const p1 = positions[e.from], p2 = positions[e.to];
+      if (!p1 || !p2) continue;
+      edgesGroup.appendChild(bezierPath(p1, p2, 'edge-path'));
+    }
+    // Navigation edges (stub positioned as a layout-child of its trigger).
+    for (const e of currentGraph.edges.filter((e) => e.kind === 'navigation')) {
+      const p1 = positions[e.from], p2 = positions[e.to];
+      if (!p1 || !p2) continue;
+      edgesGroup.appendChild(bezierPath(p1, p2, 'nav-edge-path', 'nav-arrow'));
+    }
+    svg.appendChild(edgesGroup);
+
+    const nodesGroup = document.createElementNS(SVG_NS, 'g');
+    for (const id in positions) {
+      const node = byId[id];
+      const kids = (childrenOf[id] || []).filter((k) => byId[k]);
+      nodesGroup.appendChild(buildGraphNodeEl(node, positions[id], kids.length));
+    }
+    svg.appendChild(nodesGroup);
+
+    // Reference edges drawn last (on top) — dashed cross-links, only when
+    // both endpoints currently have a position (not hidden by collapse).
+    const refGroup = document.createElementNS(SVG_NS, 'g');
+    for (const e of currentGraph.edges.filter((e) => e.kind === 'reference')) {
+      const p1 = positions[e.from], p2 = positions[e.to];
+      if (!p1 || !p2) continue;
+      const path = straightPath(p1, p2, 'ref-edge-path', 'ref-arrow');
+      const title = document.createElementNS(SVG_NS, 'title');
+      title.textContent = `${e.via}: ${byId[e.to].label || byId[e.to].identifier}`;
+      path.appendChild(title);
+      refGroup.appendChild(path);
+    }
+    svg.appendChild(refGroup);
+
+    treeRoot.appendChild(svg);
+
+    if (fit) {
+      const vw = treeRoot.clientWidth || 800;
+      const vh = treeRoot.clientHeight || 600;
+      const contentW = maxX + 40;
+      const contentH = maxY + 40;
+      const scale = Math.min(1.2, Math.max(0.15, Math.min(vw / contentW, vh / contentH) * 0.9));
+      view = { x: (vw - contentW * scale) / 2, y: Math.max(20, (vh - contentH * scale) / 2), scale };
+    }
+    applyGraphTransform();
+  }
+
+  function bezierPath(p1, p2, className, markerId) {
+    const x1 = p1.x + NODE_W / 2, y1 = p1.y + NODE_H;
+    const x2 = p2.x + NODE_W / 2, y2 = p2.y;
+    const midY = (y1 + y2) / 2;
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`);
+    path.setAttribute('class', className);
+    if (markerId) path.setAttribute('marker-end', `url(#${markerId})`);
+    return path;
+  }
+
+  function straightPath(p1, p2, className, markerId) {
+    const x1 = p1.x + NODE_W / 2, y1 = p1.y + NODE_H / 2;
+    const x2 = p2.x + NODE_W / 2, y2 = p2.y + NODE_H / 2;
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
+    path.setAttribute('class', className);
+    if (markerId) path.setAttribute('marker-end', `url(#${markerId})`);
+    return path;
+  }
+
+  function buildGraphNodeEl(node, pos, kidsCount) {
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+    g.setAttribute('data-node-id', node.id);
+    const category = categoryFor(node.typeName);
+    const classes = ['gnode'];
+    if (node.id === selectedNodeId) classes.push('selected');
+    if (node.external) classes.push('external');
+    if (searchQuery) classes.push(matchIds.has(node.id) ? 'match' : 'dimmed');
+    g.setAttribute('class', classes.join(' '));
+
+    const rect = document.createElementNS(SVG_NS, 'rect');
+    rect.setAttribute('width', NODE_W);
+    rect.setAttribute('height', NODE_H);
+    rect.setAttribute('rx', 8);
+    rect.setAttribute('class', 'gnode-rect');
+    g.appendChild(rect);
+
+    const icon = document.createElementNS(SVG_NS, 'text');
+    icon.setAttribute('x', 12);
+    icon.setAttribute('y', 18);
+    icon.setAttribute('class', `gnode-icon cat-${category}`);
+    icon.textContent = iconFor(node.typeName);
+    g.appendChild(icon);
+
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('x', 12);
+    label.setAttribute('y', 33);
+    label.setAttribute('class', 'gnode-label');
+    label.textContent = truncateText(node.label || node.identifier || '(unnamed)', 20);
+    g.appendChild(label);
+
+    const typeLabel = document.createElementNS(SVG_NS, 'text');
+    typeLabel.setAttribute('x', 12);
+    typeLabel.setAttribute('y', 43);
+    typeLabel.setAttribute('class', 'gnode-type');
+    typeLabel.textContent = node.typeName;
+    g.appendChild(typeLabel);
+
+    if (kidsCount > 0) {
+      const toggle = document.createElementNS(SVG_NS, 'text');
+      toggle.setAttribute('x', NODE_W - 10);
+      toggle.setAttribute('y', 16);
+      toggle.setAttribute('text-anchor', 'end');
+      toggle.setAttribute('class', 'gnode-toggle');
+      toggle.textContent = collapsed.has(node.id) ? `+${kidsCount}` : '−';
+      toggle.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (collapsed.has(node.id)) collapsed.delete(node.id);
+        else collapsed.add(node.id);
+        render();
+      });
+      g.appendChild(toggle);
+    }
+
+    g.addEventListener('click', () => {
+      if (node.external) {
+        requestOpenExternalPage(node);
+        return;
+      }
+      selectAndReveal(node.id, { jumpToSource: true });
+    });
+
+    return g;
+  }
+
+  function truncateText(str, n) {
+    return str.length > n ? str.slice(0, n - 1) + '…' : str;
+  }
+
+  function applyGraphTransform() {
+    if (!svgEl) return;
+    svgEl.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.scale})`;
+  }
+
+  function centerGraphOnNode(nodeId) {
+    if (!svgEl) return;
+    const el = treeRoot.querySelector(`[data-node-id="${nodeId}"]`);
+    if (!el) return;
+    const m = el.getAttribute('transform').match(/translate\(([-\d.]+),\s*([-\d.]+)\)/);
+    if (!m) return;
+    const x = parseFloat(m[1]), y = parseFloat(m[2]);
+    const vw = treeRoot.clientWidth || 800;
+    const vh = treeRoot.clientHeight || 600;
+    view.x = vw / 2 - (x + NODE_W / 2) * view.scale;
+    view.y = vh / 2 - (y + NODE_H / 2) * view.scale;
+    applyGraphTransform();
+  }
+
+  // Pan + zoom — only meaningful in Graph view; Tree/By Type use native
+  // scroll, so these no-op unless viewMode === 'graph'.
+  let dragging = false;
+  let dragStart = { x: 0, y: 0 };
+  treeRoot.addEventListener('mousedown', (ev) => {
+    if (viewMode !== 'graph') return;
+    dragging = true;
+    treeRoot.classList.add('dragging');
+    dragStart = { x: ev.clientX - view.x, y: ev.clientY - view.y };
+  });
+  window.addEventListener('mousemove', (ev) => {
+    if (!dragging) return;
+    view.x = ev.clientX - dragStart.x;
+    view.y = ev.clientY - dragStart.y;
+    applyGraphTransform();
+  });
+  window.addEventListener('mouseup', () => {
+    dragging = false;
+    treeRoot.classList.remove('dragging');
+  });
+  treeRoot.addEventListener('wheel', (ev) => {
+    if (viewMode !== 'graph') return;
+    ev.preventDefault();
+    const delta = ev.deltaY > 0 ? 0.9 : 1.1;
+    view.scale = Math.min(3, Math.max(0.2, view.scale * delta));
+    applyGraphTransform();
+  }, { passive: false });
 
   function buildGroupHeaderEl(groupId, typeName, count, isCollapsed) {
     const row = document.createElement('div');
@@ -415,8 +715,12 @@
     expandAncestorsOf(nodeId);
     selectedNodeId = nodeId;
     render();
-    const el = treeRoot.querySelector(`[data-node-id="${nodeId}"]`);
-    if (el) el.scrollIntoView({ block: 'nearest' });
+    if (viewMode === 'graph') {
+      centerGraphOnNode(nodeId);
+    } else {
+      const el = treeRoot.querySelector(`[data-node-id="${nodeId}"]`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
     showDetail(node);
     if (opts && opts.jumpToSource && typeof node.line === 'number') {
       vscode.postMessage({ type: 'revealLine', line: node.line });

@@ -70,7 +70,19 @@ separate floating boxes.
 - [ ] Top-level rows are now type groups ("region (N)", "button (N)",
       etc.), each collapsed by default — click to expand and see members.
 - [ ] Click a member row — still jumps to source / shows detail.
-- [ ] Toggle back to "View: Tree" — original hierarchy view returns intact.
+- [ ] Click "View: By Type" again → flips to "View: Graph" (boxes-and-wires
+      canvas). Click once more → back to "View: Tree".
+
+## 6b. Graph view (canvas)
+- [ ] In Graph view, drag to pan, scroll wheel to zoom.
+- [ ] Click a node — selects it, shows detail panel, jumps to source.
+- [ ] Click a node's `−`/`+N` toggle — collapses/expands that subtree.
+- [ ] Dashed purple lines (reference edges) and dashed blue lines
+      (navigation edges, ending at an external-page stub box) should be
+      visible on `p00007-buttons-and-refs.apx`.
+- [ ] Click an external-page stub node — same confirm-before-navigate
+      dialog as the badge in Tree view.
+- [ ] "Expand all"/"Collapse all" and search highlighting also work here.
 
 ## 7. Breadcrumbs + keyboard nav
 - [ ] In Tree view, click a deeply nested node (e.g. a `pageItem` inside a

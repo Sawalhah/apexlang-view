@@ -8,4 +8,6 @@ corpus-report.txt
 corpus-report.html
 .vscode/**
 .vscodeignore
+.gitignore
+.git/**
 **/*.map

@@ -1,0 +1,11 @@
+restDataSource UnusedWeatherApi (
+    name: Unused Weather Api
+    source {
+        type: http
+        remoteServer: @api_weather_example
+        urlPathPrefix: /v1/forecast
+    }
+    operation get (
+        name: GET
+    )
+)

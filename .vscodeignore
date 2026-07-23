@@ -1,0 +1,11 @@
+src/test-parser.js
+src/test-corpus.js
+src/generate-corpus-report.js
+test/**
+fixtures/**
+TESTING-CHECKLIST.md
+corpus-report.txt
+corpus-report.html
+.vscode/**
+.vscodeignore
+**/*.map

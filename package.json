@@ -1,0 +1,61 @@
+{
+  "name": "apexlang-desk",
+  "displayName": "APEXLang Desk",
+  "description": "Structural graph viewer for Oracle APEX's APEXLang export format",
+  "version": "0.1.0",
+  "publisher": "sawalhah",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Visualization", "Other"],
+  "activationEvents": [
+    "onLanguage:apexlang",
+    "workspaceContains:**/*.apx"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "apexlang",
+        "extensions": [".apx"],
+        "aliases": ["APEXLang"]
+      }
+    ],
+    "commands": [
+      {
+        "command": "apexlangDesk.openGraph",
+        "title": "APEXLang Desk: Open Graph View",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "apexlangDesk.showLogs",
+        "title": "APEXLang Desk: Show Logs"
+      },
+      {
+        "command": "apexlangDesk.switchFile",
+        "title": "APEXLang Desk: Switch File"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "apexlangDesk.openGraph",
+          "when": "resourceExtname == .apx",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "apexlangDesk.openGraph",
+          "when": "resourceExtname == .apx"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:parser": "node src/test-parser.js",
+    "test:corpus": "node src/test-corpus.js"
+  }
+}

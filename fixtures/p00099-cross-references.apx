@@ -1,0 +1,45 @@
+page 99 (
+    name: "Cross Reference Demo"
+    alias: "XREF_DEMO"
+    title: "Cross Reference Demo"
+
+    region buttons-region (
+        name: "Buttons"
+        type: "staticContent"
+        sequence: 10
+
+        button save (
+            name: "Save"
+            label: "Save"
+            action: "submit"
+        )
+
+        button cancel (
+            name: "Cancel"
+            label: "Cancel"
+            action: "redirect"
+        )
+    )
+
+    region actions-region (
+        name: "Actions"
+        type: "staticContent"
+        sequence: 20
+
+        action save-action (
+            name: "SaveAction"
+            button: @save
+            triggeringCondition: "always"
+        )
+
+        action cancel-action (
+            name: "CancelAction"
+            button: @cancel
+        )
+
+        action template-only (
+            name: "TemplateOnly"
+            pageTemplate: @/standard
+        )
+    )
+)

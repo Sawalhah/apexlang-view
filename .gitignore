@@ -1,0 +1,6 @@
+node_modules/
+*.vsix
+corpus-report.html
+corpus-report.txt
+.DS_Store
+Thumbs.db

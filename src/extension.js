@@ -1,4 +1,4 @@
-const vscode = require('vscode');
+﻿const vscode = require('vscode');
 const path = require('path');
 const { parseApxToGraph, assessParseQuality } = require('./parser');
 const { guessAppRoot, buildPageIndex, injectNavStubs } = require('./page-nav');
@@ -6,7 +6,7 @@ const { findOrphans } = require('./orphan-detector');
 
 // Output channel for everything — panel lifecycle, parse timing, and any
 // exception (extension-side or reported up from the webview). View via
-// "APEXLang Desk: Show Logs" or View → Output → "APEXLang Desk".
+// "APEXLang View: Show Logs" or View → Output → "APEXLang View".
 let output;
 function log(line) {
   const ts = new Date().toISOString().split('T')[1].replace('Z', '');
@@ -29,7 +29,7 @@ function isKnownBenignNoise(err) {
 }
 
 // Single persistent panel. Switching which file it shows is done via the
-// in-panel "Switch file..." picker (apexlangDesk.switchFile) — deliberately
+// in-panel "Switch file..." picker (apexlangView.switchFile) — deliberately
 // NOT by following the active text editor. An earlier version followed
 // onDidChangeActiveTextEditor, but clicking a file in Explorer always opens
 // it as a text tab first (core VS Code behavior, not something an
@@ -72,12 +72,12 @@ async function resolveNavTargets(uri, graph) {
 
 /** @param {vscode.ExtensionContext} context */
 function activate(context) {
-  output = vscode.window.createOutputChannel('APEXLang Desk');
+  output = vscode.window.createOutputChannel('APEXLang View');
   context.subscriptions.push(output);
   log('Extension activated.');
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('apexlangDesk.showLogs', () => output.show())
+    vscode.commands.registerCommand('apexlangView.showLogs', () => output.show())
   );
 
   process.on('uncaughtException', (err) => {
@@ -90,23 +90,23 @@ function activate(context) {
   });
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('apexlangDesk.openGraph', async (uri) => {
+    vscode.commands.registerCommand('apexlangView.openGraph', async (uri) => {
       try {
         await openGraphCommand(context, uri);
       } catch (err) {
-        logError('apexlangDesk.openGraph failed', err);
-        vscode.window.showErrorMessage(`APEXLang Desk: unexpected error — ${err.message}. See "APEXLang Desk" output channel for details.`);
+        logError('apexlangView.openGraph failed', err);
+        vscode.window.showErrorMessage(`APEXLang View: unexpected error — ${err.message}. See "APEXLang View" output channel for details.`);
       }
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('apexlangDesk.switchFile', async () => {
+    vscode.commands.registerCommand('apexlangView.switchFile', async () => {
       try {
         await switchFileCommand(context);
       } catch (err) {
-        logError('apexlangDesk.switchFile failed', err);
-        vscode.window.showErrorMessage(`APEXLang Desk: unexpected error — ${err.message}. See "APEXLang Desk" output channel for details.`);
+        logError('apexlangView.switchFile failed', err);
+        vscode.window.showErrorMessage(`APEXLang View: unexpected error — ${err.message}. See "APEXLang View" output channel for details.`);
       }
     })
   );
@@ -144,7 +144,7 @@ function activate(context) {
 async function openGraphCommand(context, uri) {
   const targetUri = uri || vscode.window.activeTextEditor?.document.uri;
   if (!targetUri) {
-    vscode.window.showWarningMessage('APEXLang Desk: open an .apx file first, or use "APEXLang Desk: Switch File".');
+    vscode.window.showWarningMessage('APEXLang View: open an .apx file first, or use "APEXLang View: Switch File".');
     return;
   }
 
@@ -169,7 +169,7 @@ async function openGraphCommand(context, uri) {
 async function switchFileCommand(context) {
   const files = await vscode.workspace.findFiles('**/*.apx', '**/node_modules/**', 500);
   if (files.length === 0) {
-    vscode.window.showInformationMessage('APEXLang Desk: no .apx files found in this workspace.');
+    vscode.window.showInformationMessage('APEXLang View: no .apx files found in this workspace.');
     return;
   }
 
@@ -209,7 +209,7 @@ async function switchFileCommand(context) {
 async function findUnusedComponentsCommand(context) {
   const anchorUri = vscode.window.activeTextEditor?.document.uri || currentUri;
   if (!anchorUri) {
-    vscode.window.showWarningMessage('APEXLang Desk: open (or view the graph for) an .apx file first, so I know which app to scan.');
+    vscode.window.showWarningMessage('APEXLang View: open (or view the graph for) an .apx file first, so I know which app to scan.');
     return;
   }
 
@@ -231,7 +231,7 @@ async function findUnusedComponentsCommand(context) {
   log(`findUnusedComponents: scanned ${files.length} files, found ${orphans.length} unused shared component(s)`);
 
   if (orphans.length === 0) {
-    vscode.window.showInformationMessage('APEXLang Desk: no unused shared components found.');
+    vscode.window.showInformationMessage('APEXLang View: no unused shared components found.');
     return;
   }
 
@@ -255,7 +255,7 @@ async function findUnusedComponentsCommand(context) {
 async function createPanelAndShow(context, targetUri) {
   log(`Opening panel for ${targetUri.toString()}`);
   panel = vscode.window.createWebviewPanel(
-    'apexlangDeskGraph',
+    'apexlangViewGraph',
     'APEXLang Graph',
     vscode.ViewColumn.Beside,
     {
@@ -345,7 +345,7 @@ async function refresh(uri) {
     }
   } catch (err) {
     logError(`refresh(${fileName}): read failed`, err);
-    vscode.window.showErrorMessage(`APEXLang Desk: could not read file — ${err.message}`);
+    vscode.window.showErrorMessage(`APEXLang View: could not read file — ${err.message}`);
     return;
   }
 
@@ -354,7 +354,7 @@ async function refresh(uri) {
     graph = parseApxToGraph(text);
   } catch (err) {
     logError(`refresh(${fileName}): parse failed`, err);
-    vscode.window.showErrorMessage(`APEXLang Desk: parse failed — ${err.message}`);
+    vscode.window.showErrorMessage(`APEXLang View: parse failed — ${err.message}`);
     return;
   }
 
@@ -411,7 +411,7 @@ async function revealLineInEditor(targetUri, line) {
     editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
   } catch (err) {
     logError('revealLineInEditor failed', err);
-    vscode.window.showErrorMessage(`APEXLang Desk: could not jump to source — ${err.message}`);
+    vscode.window.showErrorMessage(`APEXLang View: could not jump to source — ${err.message}`);
   }
 }
 

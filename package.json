@@ -1,6 +1,6 @@
-{
-  "name": "apexlang-desk",
-  "displayName": "APEXLang Desk",
+﻿{
+  "name": "apexlang-view",
+  "displayName": "APEXLang View",
   "description": "Structural graph viewer for Oracle APEX's APEXLang export format",
   "version": "0.1.0",
   "publisher": "sawalhah",
@@ -25,30 +25,30 @@
     ],
     "commands": [
       {
-        "command": "apexlangDesk.openGraph",
-        "title": "APEXLang Desk: Open Graph View",
+        "command": "apexlangView.openGraph",
+        "title": "APEXLang View: Open Graph View",
         "icon": "$(type-hierarchy)"
       },
       {
-        "command": "apexlangDesk.showLogs",
-        "title": "APEXLang Desk: Show Logs"
+        "command": "apexlangView.showLogs",
+        "title": "APEXLang View: Show Logs"
       },
       {
-        "command": "apexlangDesk.switchFile",
-        "title": "APEXLang Desk: Switch File"
+        "command": "apexlangView.switchFile",
+        "title": "APEXLang View: Switch File"
       }
     ],
     "menus": {
       "editor/title": [
         {
-          "command": "apexlangDesk.openGraph",
+          "command": "apexlangView.openGraph",
           "when": "resourceExtname == .apx",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
-          "command": "apexlangDesk.openGraph",
+          "command": "apexlangView.openGraph",
           "when": "resourceExtname == .apx"
         }
       ]

@@ -1,4 +1,4 @@
-// Generates a standalone HTML report visualizing parser results across the
+﻿// Generates a standalone HTML report visualizing parser results across the
 // full 1263-file real-world corpus — a fast visual scan instead of reading
 // a text list. Self-contained (no CDN), matches the artifact/no-external-
 // request constraint.
@@ -91,7 +91,7 @@ const html = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>APEXLang Desk — Corpus Parse Report</title>
+<title>APEXLang View — Corpus Parse Report</title>
 <style>
   :root { color-scheme: light dark; }
   body { font-family: -apple-system, Segoe UI, sans-serif; margin: 0; padding: 24px; background: #0f1117; color: #e6e6e6; }
@@ -128,8 +128,8 @@ const html = `<!doctype html>
 </style>
 </head>
 <body>
-<h1>APEXLang Desk — Corpus Parse Report</h1>
-<div class="sub">Every real .apx export under apex-apps/sample-apps, parsed with tools/apexlang-desk/src/parser.js</div>
+<h1>APEXLang View — Corpus Parse Report</h1>
+<div class="sub">Every real .apx export under apex-apps/sample-apps, parsed with tools/apexlang-view/src/parser.js</div>
 
 <div class="summary">
   <div class="stat ok"><div class="n">${totalOk}</div><div class="l">Clean</div></div>

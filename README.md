@@ -1,4 +1,4 @@
-# APEXLang Desk
+﻿# APEXLang View
 
 A structural viewer for Oracle APEX's APEXLang export format (`.apx` files,
 introduced in APEX 26.1). Renders a page's component hierarchy — page →
@@ -52,17 +52,17 @@ node-graph canvas.
 2. Press F5 (Run Extension) to launch an Extension Development Host.
 3. In that new window, open a file from `fixtures/` (e.g.
    `p00003-basic-cards.apx`) and use the editor title bar icon, or
-   right-click the file, → "APEXLang Desk: Open Graph View".
+   right-click the file, → "APEXLang View: Open Graph View".
 4. Use the toolbar's "Switch file…" button, or click a different `.apx`
    file in Explorer, to change what the graph shows.
 
 ## Commands
 
-- **APEXLang Desk: Open Graph View** — opens/toggles the graph panel for
+- **APEXLang View: Open Graph View** — opens/toggles the graph panel for
   the active (or right-clicked) `.apx` file.
-- **APEXLang Desk: Switch File** — quick-pick any `.apx` file in the
+- **APEXLang View: Switch File** — quick-pick any `.apx` file in the
   workspace without touching the text editor.
-- **APEXLang Desk: Show Logs** — opens the "APEXLang Desk" output channel
+- **APEXLang View: Show Logs** — opens the "APEXLang View" output channel
   (panel lifecycle, parse timing/node counts, and any error, extension-side
   or from the webview).
 

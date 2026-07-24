@@ -1,4 +1,4 @@
-# APEXLang Desk — Manual Test Checklist
+﻿# APEXLang View — Manual Test Checklist
 
 Run through this in the Extension Development Host (F5) before release. Check
 off each item; note anything that breaks so it can be reported back.
@@ -13,11 +13,11 @@ separate floating boxes.
 ## Setup
 - [ ] Press F5, wait for the Dev Host window to open.
 - [ ] In the Dev Host, open this folder's `fixtures/` directory (or the
-      whole `apexlang-desk` folder).
+      whole `apexlang-view` folder).
 
 ## 1. Basic tree view
 - [ ] Open `fixtures/p00003-basic-cards.apx`.
-- [ ] Right-click the file → "APEXLang Desk: Open Graph View" (or use the
+- [ ] Right-click the file → "APEXLang View: Open Graph View" (or use the
       editor title bar icon). Panel opens beside the editor as an indented
       list (page → regions → items), not a floating box canvas.
 - [ ] Click a row → detail panel shows properties + a breadcrumb, and the
@@ -121,7 +121,7 @@ separate floating boxes.
 - [ ] Switch back to a dark theme — same check.
 
 ## 11. Logging / error visibility
-- [ ] Command Palette → "APEXLang Desk: Show Logs" — output channel opens
+- [ ] Command Palette → "APEXLang View: Show Logs" — output channel opens
       with timestamped lines for each panel action.
 - [ ] No unexpected errors appear (the one benign "Missing dataLength in
       event" Node-inspector line is now filtered out — if you see it,

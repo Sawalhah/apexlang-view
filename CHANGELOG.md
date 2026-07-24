@@ -1,6 +1,6 @@
-# Changelog
+﻿# Changelog
 
-All notable changes to APEXLang Desk are documented here. Format loosely
+All notable changes to APEXLang View are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [0.1.0] — Unreleased

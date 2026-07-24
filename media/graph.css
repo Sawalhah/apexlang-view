@@ -471,3 +471,38 @@ html, body {
   color: var(--vscode-descriptionForeground, #999);
   min-width: 60px;
 }
+
+/* Whole-app page map (roadmap #2) */
+.app-map-row {
+  padding: 6px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--vscode-panel-border, #444) 50%, transparent);
+}
+
+.app-map-page-title {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.app-map-page-title:hover {
+  text-decoration: underline;
+}
+
+.app-map-nav {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #999);
+}
+
+.app-map-chip {
+  display: inline-block;
+  cursor: pointer;
+  padding: 1px 6px;
+  margin-right: 2px;
+  border-radius: 8px;
+  background: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #fff);
+}
+
+.app-map-chip:hover {
+  background: var(--vscode-list-hoverBackground, #2a2d2e);
+}

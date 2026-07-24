@@ -3,6 +3,7 @@ const path = require('path');
 const { parseApxToGraph, assessParseQuality } = require('./parser');
 const { guessAppRoot, buildPageIndex, injectNavStubs } = require('./page-nav');
 const { findOrphans } = require('./orphan-detector');
+const { buildAppMap } = require('./app-map');
 
 // Output channel for everything — panel lifecycle, parse timing, and any
 // exception (extension-side or reported up from the webview). View via
@@ -111,6 +112,17 @@ function activate(context) {
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('apexlangView.openAppMap', async (uri) => {
+      try {
+        await openAppMapCommand(context, uri);
+      } catch (err) {
+        logError('apexlangView.openAppMap failed', err);
+        vscode.window.showErrorMessage(`APEXLang View: unexpected error — ${err.message}. See "APEXLang View" output channel for details.`);
+      }
+    })
+  );
+
   // Live refresh: re-parse on edits to whichever file the panel currently
   // shows. Registered once (not per-panel) since currentUri now changes
   // over the panel's lifetime instead of being fixed at creation.
@@ -193,6 +205,42 @@ async function switchFileCommand(context) {
   } else {
     await createPanelAndShow(context, picked.uri);
   }
+}
+
+// Scans the whole app root for .apx files, builds a page-to-page nav map
+// (roadmap #2, app-level scope — see app-map.js), and pushes it into the
+// panel. Opens the panel first (showing whichever file anchors the scan) if
+// it isn't already open, matching openGraphCommand's own bootstrap.
+async function openAppMapCommand(context, uri) {
+  const anchorUri = uri || vscode.window.activeTextEditor?.document.uri || currentUri;
+  if (!anchorUri) {
+    vscode.window.showWarningMessage('APEXLang View: open an .apx file first, or use "APEXLang View: Switch File", so I know which app to map.');
+    return;
+  }
+
+  const appRoot = guessAppRoot(anchorUri.fsPath);
+  log(`Building app map for: ${appRoot}`);
+  const pattern = new vscode.RelativePattern(appRoot, '**/*.apx');
+  const uris = await vscode.workspace.findFiles(pattern, null, 5000);
+  const files = [];
+  for (const u of uris) {
+    try {
+      const bytes = await vscode.workspace.fs.readFile(u);
+      files.push({ fsPath: u.fsPath, text: Buffer.from(bytes).toString('utf8') });
+    } catch (err) {
+      logError(`openAppMap: could not read ${u.fsPath}`, err);
+    }
+  }
+
+  const appMap = buildAppMap(files);
+  log(`App map: ${appMap.pages.length} page(s), ${appMap.edges.length} edge(s)`);
+
+  if (!panel) {
+    await createPanelAndShow(context, anchorUri);
+  } else {
+    panel.reveal(panel.viewColumn, true);
+  }
+  panel.webview.postMessage({ type: 'appMap', appMap });
 }
 
 // NOT CURRENTLY WIRED TO A COMMAND (roadmap #5, deliberately shelved
@@ -280,6 +328,10 @@ async function createPanelAndShow(context, targetUri) {
     }
     if (msg.type === 'switchFile') {
       switchFileCommand(context).catch((err) => logError('switch-file from toolbar failed', err));
+      return;
+    }
+    if (msg.type === 'openAppMap') {
+      openAppMapCommand(context, currentUri).catch((err) => logError('app-map from toolbar failed', err));
       return;
     }
     if (msg.type === 'openExternalPage' && msg.targetFsPath) {
@@ -433,6 +485,7 @@ function getWebviewHtml(webview, mediaUri) {
 <body>
   <div id="toolbar">
     <button id="switch-file" title="Pick a different .apx file to view">Switch file…</button>
+    <button id="app-map" title="Show a page-to-page navigation map for the whole app">App Map</button>
     <button id="view-toggle" title="Toggle between hierarchy tree and grouped-by-type list">View: Tree</button>
     <span id="file-label"></span>
     <span id="node-count"></span>

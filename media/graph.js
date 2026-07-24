@@ -78,6 +78,9 @@
   document.getElementById('switch-file').addEventListener('click', () => {
     vscode.postMessage({ type: 'switchFile' });
   });
+  document.getElementById('app-map').addEventListener('click', () => {
+    vscode.postMessage({ type: 'openAppMap' });
+  });
 
   let currentGraph = null;
   let currentFileName = null;
@@ -91,6 +94,12 @@
   // per typeName across the whole file, ignoring containment — for scanning
   // "how many regions/buttons/page items does this page have").
   let viewMode = 'tree';
+  // Whole-app page map (roadmap #2) is a separate top-level state, not a
+  // fourth VIEW_MODES entry — it's cross-file data (pages + nav edges), not
+  // another way to look at the current single-file graph, so it fully
+  // replaces the tree/byType/graph container instead of toggling within it.
+  let showingAppMap = false;
+  let appMapData = null;
 
   const VIEW_MODES = ['tree', 'byType', 'graph'];
   const VIEW_LABELS = { tree: 'View: Tree', byType: 'View: By Type', graph: 'View: Graph' };
@@ -107,6 +116,7 @@
   window.addEventListener('message', (event) => {
     const msg = event.data;
     if (msg.type === 'fileChanged') {
+      showingAppMap = false;
       fileLabelEl.textContent = msg.fileName;
       detailPanel.classList.add('hidden');
       selectedNodeId = null;
@@ -115,7 +125,15 @@
       applySearch();
       return;
     }
+    if (msg.type === 'appMap') {
+      showingAppMap = true;
+      appMapData = msg.appMap;
+      detailPanel.classList.add('hidden');
+      render();
+      return;
+    }
     if (msg.type === 'graph') {
+      showingAppMap = false;
       const isNewFile = currentGraph === null || msg.fileName !== currentFileName;
       currentGraph = msg.graph;
       currentFileName = msg.fileName;
@@ -264,6 +282,10 @@
 
   function render(opts) {
     treeRoot.innerHTML = '';
+    if (showingAppMap) {
+      renderAppMap();
+      return;
+    }
     if (!currentGraph) return;
 
     if (viewMode === 'byType') {
@@ -291,6 +313,63 @@
     if (kids.length > 0 && !isCollapsed) {
       for (const kidId of kids) appendRow(container, byId[kidId], depth + 1, childrenOf, byId);
     }
+  }
+
+  // Whole-app page map (roadmap #2): a plain list of pages, each with a
+  // "Navigates to" line of clickable page chips — deliberately not a
+  // boxes-and-wires canvas like the Graph view. Reuses the same row/link
+  // primitives as the References panel (renderReferences) rather than
+  // inventing new layout machinery for what's still just a small list in
+  // realistic apps (tens, not hundreds, of pages).
+  function renderAppMap() {
+    if (!appMapData) return;
+    nodeCountEl.textContent = `${appMapData.pages.length} page${appMapData.pages.length === 1 ? '' : 's'}`;
+    fileLabelEl.textContent = 'App Map';
+
+    const outgoingByPage = {};
+    for (const e of appMapData.edges) {
+      if (!outgoingByPage[e.from]) outgoingByPage[e.from] = [];
+      outgoingByPage[e.from].push(e.to);
+    }
+    const pageByNumber = {};
+    for (const p of appMapData.pages) pageByNumber[p.pageNumber] = p;
+
+    const frag = document.createDocumentFragment();
+    for (const page of appMapData.pages) {
+      const row = document.createElement('div');
+      row.className = 'app-map-row';
+
+      const title = document.createElement('div');
+      title.className = 'app-map-page-title';
+      title.textContent = `Page ${page.pageNumber} — ${page.label}`;
+      title.addEventListener('click', () => {
+        vscode.postMessage({ type: 'openExternalPage', targetFsPath: page.fsPath, label: page.label });
+      });
+      row.appendChild(title);
+
+      const targets = outgoingByPage[page.pageNumber] || [];
+      if (targets.length > 0) {
+        const nav = document.createElement('div');
+        nav.className = 'app-map-nav';
+        nav.appendChild(document.createTextNode('Navigates to: '));
+        targets.forEach((targetPageNumber, i) => {
+          const target = pageByNumber[targetPageNumber];
+          if (!target) return;
+          const chip = document.createElement('span');
+          chip.className = 'app-map-chip';
+          chip.textContent = `Page ${target.pageNumber}`;
+          chip.addEventListener('click', () => {
+            vscode.postMessage({ type: 'openExternalPage', targetFsPath: target.fsPath, label: target.label });
+          });
+          nav.appendChild(chip);
+          if (i < targets.length - 1) nav.appendChild(document.createTextNode(' '));
+        });
+        row.appendChild(nav);
+      }
+
+      frag.appendChild(row);
+    }
+    treeRoot.appendChild(frag);
   }
 
   function renderByType() {

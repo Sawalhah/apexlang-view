@@ -29,10 +29,16 @@ Initial build. Not yet published to the VS Code Marketplace.
 - Theme-native styling — every color is a VS Code theme token, correct in
   light, dark, and custom themes.
 - Live refresh on file edit (debounced).
+- "App Map" — a page-to-page navigation map for the whole app: scans every
+  `.apx` page under the app root and lists each page with its outgoing
+  navigation targets as clickable chips; click a page to jump the graph to
+  it. Not a merged cross-file graph — just page-level nav, resolved from the
+  same navTarget data already used for single-file nav stubs.
 
 ### Known limitations
 
-- Single-file scope — no whole-app graph across multiple pages yet.
+- App Map covers page-to-page navigation only — it's not a merged, full
+  cross-file containment graph (that's a larger, separate effort).
 - Cross-reference resolution only recognizes the bare `@identifier` syntax;
   many real APEX references use a plain name string instead.
 - An "unused shared components" detector was built and tested, but shelved

@@ -36,6 +36,10 @@
       {
         "command": "apexlangView.switchFile",
         "title": "APEXLang View: Switch File"
+      },
+      {
+        "command": "apexlangView.openAppMap",
+        "title": "APEXLang View: Open App Map"
       }
     ],
     "menus": {

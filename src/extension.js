@@ -1,4 +1,4 @@
-﻿const vscode = require('vscode');
+const vscode = require('vscode');
 const path = require('path');
 const { parseApxToGraph, assessParseQuality } = require('./parser');
 const { guessAppRoot, buildPageIndex, injectNavStubs } = require('./page-nav');

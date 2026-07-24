@@ -1,4 +1,4 @@
-﻿# APEXLang View — Manual Test Checklist
+# APEXLang View — Manual Test Checklist
 
 Run through this in the Extension Development Host (F5) before release. Check
 off each item; note anything that breaks so it can be reported back.

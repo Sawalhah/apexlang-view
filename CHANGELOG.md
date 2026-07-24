@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to APEXLang View are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).

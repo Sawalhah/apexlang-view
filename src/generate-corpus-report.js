@@ -1,4 +1,4 @@
-﻿// Generates a standalone HTML report visualizing parser results across the
+// Generates a standalone HTML report visualizing parser results across the
 // full 1263-file real-world corpus — a fast visual scan instead of reading
 // a text list. Self-contained (no CDN), matches the artifact/no-external-
 // request constraint.

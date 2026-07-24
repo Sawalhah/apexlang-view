@@ -1,4 +1,4 @@
-﻿# APEXLang View
+# APEXLang View
 
 A structural viewer for Oracle APEX's APEXLang export format (`.apx` files,
 introduced in APEX 26.1). Renders a page's component hierarchy — page →

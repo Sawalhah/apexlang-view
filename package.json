@@ -4,8 +4,17 @@
   "description": "Structural graph viewer for Oracle APEX's APEXLang export format",
   "version": "0.1.0",
   "publisher": "sawalhah",
+  "author": "Mohammad Sawalhah",
   "license": "MIT",
   "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sawalhah/apexlang-view"
+  },
+  "homepage": "https://github.com/Sawalhah/apexlang-view#readme",
+  "bugs": {
+    "url": "https://github.com/Sawalhah/apexlang-view/issues"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },

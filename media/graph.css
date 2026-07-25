@@ -608,3 +608,56 @@ html, body {
 .changes-card-diff-line {
   padding: 1px 0;
 }
+
+/* Diff minimap — small persistent overview, distinct from the Changes panel
+   (which lists changes as text/cards). This is a compact structural map:
+   every node as a dot, containment as lines, diff status as color. Fixed
+   box size regardless of tree size — the SVG viewBox scales the actual
+   content to fit, same trick a code minimap uses. */
+#diff-minimap {
+  position: absolute;
+  top: 34px;
+  right: 8px;
+  width: 160px;
+  height: 120px;
+  background: color-mix(in srgb, var(--vscode-editor-background, #1e1e1e) 85%, transparent);
+  border: 1px solid var(--vscode-panel-border, #444);
+  border-radius: 6px;
+  z-index: 5;
+  opacity: 0.9;
+}
+
+#diff-minimap.hidden {
+  display: none;
+}
+
+#diff-minimap:hover {
+  opacity: 1;
+}
+
+#diff-minimap svg {
+  width: 100%;
+  height: 100%;
+}
+
+#diff-minimap circle {
+  cursor: pointer;
+}
+
+#diff-minimap circle.minimap-added {
+  fill: var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
+}
+
+#diff-minimap circle.minimap-changed {
+  fill: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
+}
+
+#diff-minimap circle.minimap-unchanged {
+  fill: var(--vscode-descriptionForeground, #666);
+  opacity: 0.6;
+}
+
+#diff-minimap line {
+  stroke: var(--vscode-panel-border, #555);
+  stroke-width: 1;
+}

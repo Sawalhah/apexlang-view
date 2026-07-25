@@ -574,6 +574,7 @@ function getWebviewHtml(webview, mediaUri) {
     <button id="collapse-all">Collapse all</button>
   </div>
   <div id="warning-banner" class="hidden"></div>
+  <div id="diff-minimap" class="hidden" title="Diff minimap — click a dot to jump to that node"></div>
   <div id="graph-root"></div>
   <div id="detail-panel" class="hidden">
     <div id="detail-header">

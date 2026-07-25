@@ -72,6 +72,7 @@
   const detailBreadcrumb = document.getElementById('detail-breadcrumb');
   const detailRefs = document.getElementById('detail-refs');
   const warningBanner = document.getElementById('warning-banner');
+  const diffMinimapEl = document.getElementById('diff-minimap');
   document.getElementById('detail-close').addEventListener('click', () => {
     detailPanel.classList.add('hidden');
   });
@@ -176,6 +177,7 @@
       nodeCountEl.textContent = currentDiff
         ? `${currentGraph.nodes.length} nodes · +${currentDiff.added.length} ~${currentDiff.changed.length} -${currentDiff.removed.length} vs HEAD`
         : `${currentGraph.nodes.length} nodes`;
+      renderDiffMinimap();
       if (isNewFile) {
         // Fresh file: start with big same-type sibling groups collapsed
         // (e.g. an interactive report's 20+ columns) so the tree opens
@@ -450,6 +452,78 @@
   // aren't clickable (there's no current node to jump to) but still show
   // what was removed via removedInfo (type/identifier/label from the old
   // graph — see diff.js).
+  // Diff minimap — a small persistent overview (not a toggled view like the
+  // Changes panel): every node as a dot, containment as lines, diff status
+  // as color. Fixed-size box; the SVG viewBox scales real content to fit,
+  // same trick a code minimap uses, so it looks the same whether the file
+  // has 10 nodes or 500.
+  function renderDiffMinimap() {
+    if (!currentDiff || !currentGraph) {
+      diffMinimapEl.classList.add('hidden');
+      diffMinimapEl.innerHTML = '';
+      return;
+    }
+    diffMinimapEl.classList.remove('hidden');
+
+    const childrenOf = buildChildrenMap();
+    const roots = buildRoots();
+    const positions = {};
+    let leafCounter = 0;
+    let maxDepth = 0;
+
+    function assign(nodeId, depth) {
+      maxDepth = Math.max(maxDepth, depth);
+      const kids = childrenOf[nodeId] || [];
+      if (kids.length === 0) {
+        positions[nodeId] = { x: leafCounter, y: depth };
+        leafCounter++;
+      } else {
+        for (const kid of kids) assign(kid, depth + 1);
+        const kidXs = kids.map((k) => positions[k].x);
+        positions[nodeId] = { x: (Math.min(...kidXs) + Math.max(...kidXs)) / 2, y: depth };
+      }
+    }
+    for (const root of roots) assign(root.id, 0);
+
+    const SPACING_X = 10;
+    const SPACING_Y = 16;
+    const PADDING = 6;
+    const width = Math.max(leafCounter - 1, 1) * SPACING_X + PADDING * 2;
+    const height = maxDepth * SPACING_Y + PADDING * 2;
+
+    function diffClassFor(nodeId) {
+      if (currentDiff.added.includes(nodeId)) return 'minimap-added';
+      if (currentDiff.changed.includes(nodeId)) return 'minimap-changed';
+      return 'minimap-unchanged';
+    }
+
+    const byId = byIdMap();
+    const lines = [];
+    const circles = [];
+    for (const [nodeId, pos] of Object.entries(positions)) {
+      const px = pos.x * SPACING_X + PADDING;
+      const py = pos.y * SPACING_Y + PADDING;
+      for (const kidId of childrenOf[nodeId] || []) {
+        const kidPos = positions[kidId];
+        const kx = kidPos.x * SPACING_X + PADDING;
+        const ky = kidPos.y * SPACING_Y + PADDING;
+        lines.push(`<line x1="${px}" y1="${py}" x2="${kx}" y2="${ky}" />`);
+      }
+      circles.push(`<circle cx="${px}" cy="${py}" r="2.5" class="${diffClassFor(nodeId)}" data-node-id="${nodeId}" />`);
+    }
+
+    diffMinimapEl.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${lines.join('')}${circles.join('')}</svg>`;
+    diffMinimapEl.querySelectorAll('circle').forEach((el) => {
+      el.addEventListener('click', () => {
+        const nodeId = el.dataset.nodeId;
+        if (!byId[nodeId]) return;
+        showingAppMap = false;
+        showingChangesPanel = false;
+        selectAndReveal(nodeId, { jumpToSource: true });
+      });
+    });
+  }
+
   function renderChangesPanel() {
     if (!currentGraph || !currentDiff) return;
     const byId = byIdMap();

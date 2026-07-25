@@ -81,9 +81,14 @@
   document.getElementById('app-map').addEventListener('click', () => {
     vscode.postMessage({ type: 'openAppMap' });
   });
+  const diffToggleBtn = document.getElementById('diff-toggle');
+  diffToggleBtn.addEventListener('click', () => {
+    vscode.postMessage({ type: 'toggleDiff' });
+  });
 
   let currentGraph = null;
   let currentFileName = null;
+  let currentDiff = null; // {added, removed, changed} node-id arrays, or null
   let selectedNodeId = null;
   let collapsed = new Set(); // node ids (or 'type:<typeName>' group ids)
   let searchQuery = '';
@@ -137,8 +142,12 @@
       const isNewFile = currentGraph === null || msg.fileName !== currentFileName;
       currentGraph = msg.graph;
       currentFileName = msg.fileName;
+      currentDiff = msg.diff || null;
+      diffToggleBtn.textContent = msg.diffAgainstHead ? 'Diff: HEAD' : 'Diff: Off';
       fileLabelEl.textContent = msg.fileName;
-      nodeCountEl.textContent = `${currentGraph.nodes.length} nodes`;
+      nodeCountEl.textContent = currentDiff
+        ? `${currentGraph.nodes.length} nodes · +${currentDiff.added.length} ~${currentDiff.changed.length} -${currentDiff.removed.length} vs HEAD`
+        : `${currentGraph.nodes.length} nodes`;
       if (isNewFile) {
         // Fresh file: start with big same-type sibling groups collapsed
         // (e.g. an interactive report's 20+ columns) so the tree opens
@@ -707,6 +716,10 @@
     const classes = ['tree-row'];
     if (node.id === selectedNodeId) classes.push('selected');
     if (searchQuery) classes.push(matchIds.has(node.id) ? 'match' : 'dimmed');
+    if (currentDiff) {
+      if (currentDiff.added.includes(node.id)) classes.push('diff-added');
+      else if (currentDiff.changed.includes(node.id)) classes.push('diff-changed');
+    }
     row.className = classes.join(' ');
     row.setAttribute('role', 'treeitem');
     if (kidsCount > 0) row.setAttribute('aria-expanded', String(!isCollapsed));

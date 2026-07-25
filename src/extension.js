@@ -4,6 +4,7 @@ const { parseApxToGraph, assessParseQuality } = require('./parser');
 const { guessAppRoot, buildPageIndex, injectNavStubs } = require('./page-nav');
 const { findOrphans } = require('./orphan-detector');
 const { buildAppMap } = require('./app-map');
+const { diffGraphs } = require('./diff');
 
 // Output channel for everything — panel lifecycle, parse timing, and any
 // exception (extension-side or reported up from the webview). View via
@@ -40,6 +41,38 @@ function isKnownBenignNoise(err) {
 let panel = null;
 let currentUri = null;
 let debounceTimer = null;
+
+// Git-diff indicators (next-version feature, agreed 2026-07-25 office-hours
+// session, step 1 of the roadmap): off by default, toggled per-session (not
+// persisted) via the toolbar/command. When on, refresh() additionally fetches
+// the current file's content at HEAD via VS Code's built-in Git extension API
+// (no shell-out needed) and diffs it against the working-tree parse using
+// diff.js's pure diffGraphs.
+let diffAgainstHead = false;
+
+// Lazily resolved — the built-in git extension may not be activated yet
+// (e.g. no git repo open at all) the first time this is called.
+async function getGitApi() {
+  const gitExtension = vscode.extensions.getExtension('vscode.git');
+  if (!gitExtension) return null;
+  const exports = gitExtension.isActive ? gitExtension.exports : await gitExtension.activate();
+  return exports.getAPI(1);
+}
+
+// Returns the file's content at HEAD, or null if there's no git repo for
+// this file, the file isn't tracked yet (new/untracked), or any other git
+// error occurs — all treated as "nothing to diff against", not a hard failure.
+async function getContentAtHead(uri) {
+  try {
+    const git = await getGitApi();
+    if (!git) return null;
+    const repository = git.getRepository(uri);
+    if (!repository) return null;
+    return await repository.show('HEAD', uri.fsPath);
+  } catch (err) {
+    return null;
+  }
+}
 
 // Page-number -> file fsPath index, one per app root, built lazily and
 // cached (rebuilding on every refresh would mean a workspace file scan per
@@ -118,6 +151,17 @@ function activate(context) {
         await openAppMapCommand(context, uri);
       } catch (err) {
         logError('apexlangView.openAppMap failed', err);
+        vscode.window.showErrorMessage(`APEXLang View: unexpected error — ${err.message}. See "APEXLang View" output channel for details.`);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('apexlangView.toggleDiff', async () => {
+      try {
+        await toggleDiffCommand();
+      } catch (err) {
+        logError('apexlangView.toggleDiff failed', err);
         vscode.window.showErrorMessage(`APEXLang View: unexpected error — ${err.message}. See "APEXLang View" output channel for details.`);
       }
     })
@@ -211,6 +255,12 @@ async function switchFileCommand(context) {
 // (roadmap #2, app-level scope — see app-map.js), and pushes it into the
 // panel. Opens the panel first (showing whichever file anchors the scan) if
 // it isn't already open, matching openGraphCommand's own bootstrap.
+async function toggleDiffCommand() {
+  diffAgainstHead = !diffAgainstHead;
+  log(`Diff vs HEAD: ${diffAgainstHead ? 'on' : 'off'}`);
+  if (currentUri) await refresh(currentUri);
+}
+
 async function openAppMapCommand(context, uri) {
   const anchorUri = uri || vscode.window.activeTextEditor?.document.uri || currentUri;
   if (!anchorUri) {
@@ -334,6 +384,10 @@ async function createPanelAndShow(context, targetUri) {
       openAppMapCommand(context, currentUri).catch((err) => logError('app-map from toolbar failed', err));
       return;
     }
+    if (msg.type === 'toggleDiff') {
+      toggleDiffCommand().catch((err) => logError('toggleDiff from toolbar failed', err));
+      return;
+    }
     if (msg.type === 'openExternalPage' && msg.targetFsPath) {
       confirmAndOpenExternalPage(context, msg.targetFsPath, msg.label).catch((err) => logError('openExternalPage failed', err));
       return;
@@ -418,13 +472,28 @@ async function refresh(uri) {
     logError(`refresh(${fileName}): resolveNavTargets failed`, err);
   }
 
+  let diff = null;
+  if (diffAgainstHead) {
+    try {
+      const headText = await getContentAtHead(uri);
+      // null covers: no git repo, untracked/new file, or any git error —
+      // all "nothing to diff against", not a failure worth surfacing.
+      if (headText !== null) {
+        const headGraph = parseApxToGraph(headText);
+        diff = diffGraphs(headGraph, graph);
+      }
+    } catch (err) {
+      logError(`refresh(${fileName}): diff vs HEAD failed`, err);
+    }
+  }
+
   const quality = assessParseQuality(text, graph);
   const ms = Date.now() - startedAt;
-  log(`refresh(${fileName}): ${graph.nodes.length} nodes, ${graph.edges.length} edges, ${ms}ms${quality.suspicious ? ' [suspicious: ' + quality.reasons.join(' ') + ']' : ''}`);
+  log(`refresh(${fileName}): ${graph.nodes.length} nodes, ${graph.edges.length} edges, ${ms}ms${quality.suspicious ? ' [suspicious: ' + quality.reasons.join(' ') + ']' : ''}${diff ? ` [diff vs HEAD: +${diff.added.length} ~${diff.changed.length} -${diff.removed.length}]` : ''}`);
   // Guard against a slow parse finishing after the user has already
   // switched to a different file — don't clobber the panel with stale data.
   if (uri.toString() !== (currentUri && currentUri.toString())) return;
-  panel.webview.postMessage({ type: 'graph', fileName, graph, quality });
+  panel.webview.postMessage({ type: 'graph', fileName, graph, quality, diff, diffAgainstHead });
 }
 
 // Confirms before actually switching the graph to a nav-target stub's page
@@ -486,6 +555,7 @@ function getWebviewHtml(webview, mediaUri) {
   <div id="toolbar">
     <button id="switch-file" title="Pick a different .apx file to view">Switch file…</button>
     <button id="app-map" title="Show a page-to-page navigation map for the whole app">App Map</button>
+    <button id="diff-toggle" title="Highlight nodes changed since the last commit (HEAD)">Diff: Off</button>
     <button id="view-toggle" title="Toggle between hierarchy tree and grouped-by-type list">View: Tree</button>
     <span id="file-label"></span>
     <span id="node-count"></span>

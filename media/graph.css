@@ -191,6 +191,7 @@ html, body {
   cursor: pointer;
   user-select: none;
   transition: background-color 120ms ease-out;
+  border-left: 3px solid transparent;
 }
 
 .tree-row:hover {
@@ -505,4 +506,17 @@ html, body {
 
 .app-map-chip:hover {
   background: var(--vscode-list-hoverBackground, #2a2d2e);
+}
+
+/* Git-diff indicators — reuse VS Code's own git-decoration theme tokens
+   (same colors as the Explorer's added/modified file coloring) so this
+   matches the editor's existing visual language instead of inventing new
+   colors. Left border only, never a full-row fill, so it stays readable
+   alongside selection/hover/category-pill styling already on the row. */
+.tree-row.diff-added {
+  border-left: 3px solid var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
+}
+
+.tree-row.diff-changed {
+  border-left: 3px solid var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
 }

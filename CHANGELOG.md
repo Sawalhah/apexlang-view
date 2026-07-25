@@ -3,9 +3,36 @@
 All notable changes to APEXLang View are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.1.0] — Unreleased
+## [0.2.0] — Unreleased
 
-Initial build. Not yet published to the VS Code Marketplace.
+### Added
+
+- "Diff: HEAD" toggle — highlights nodes added (green left border) or
+  changed (yellow left border) in the current file's working-tree content
+  versus its last commit. Uses VS Code's built-in Git extension API (no
+  shell-out), diffs the two parsed graphs structurally (matched by
+  containment path + identifier, not by positional node id, so unrelated
+  edits elsewhere in the file don't cause spurious diffs). Off by default,
+  not persisted across panel restarts. Node-count label shows a
+  `+added ~changed -removed` summary; removed nodes are counted but not yet
+  rendered inline (see known limitations).
+
+### Known limitations (new this release)
+
+- Diff only compares working tree vs `HEAD` — no arbitrary ref-to-ref
+  picker yet (planned as a later step: default HEAD now, generalize later).
+- Removed nodes are counted in the summary but not shown as rows in the
+  tree (there's no current-graph node to anchor them to yet).
+- Diff highlighting only applies to Tree/By Type views, not the Graph
+  (canvas) view.
+- Anonymous (no-identifier) sibling nodes are matched by position among
+  same-typed siblings — inserting a new anonymous sibling before existing
+  ones can misalign matching for those that follow. Identified (named)
+  nodes, the vast majority in real files, are unaffected.
+
+## [0.1.0] — Published 2026-07-25
+
+Initial release, published to the VS Code Marketplace.
 
 ### Added
 

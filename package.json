@@ -49,6 +49,10 @@
       {
         "command": "apexlangView.openAppMap",
         "title": "APEXLang View: Open App Map"
+      },
+      {
+        "command": "apexlangView.toggleDiff",
+        "title": "APEXLang View: Toggle Diff vs HEAD"
       }
     ],
     "menus": {

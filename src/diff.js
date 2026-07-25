@@ -84,10 +84,36 @@ function propsEqual(a, b) {
   return a.label === b.label;
 }
 
-// Returns { added: [nodeId in newGraph], removed: [nodeId in oldGraph],
-// changed: [nodeId in newGraph] } — added/changed reference newGraph's node
-// ids (what the caller is currently rendering), removed references
-// oldGraph's ids (there's no equivalent node in newGraph to point at).
+// Returns [{key, oldValue, newValue}] for every prop (plus the pseudo-key
+// "_label") that differs between oldNode and newNode. Only called on a pair
+// already known to differ (propsEqual returned false), so the result is
+// never empty in practice.
+function computePropChanges(oldNode, newNode) {
+  const oldProps = oldNode.props || {};
+  const newProps = newNode.props || {};
+  const allKeys = new Set([...Object.keys(oldProps), ...Object.keys(newProps)]);
+  const changes = [];
+  if (oldNode.label !== newNode.label) {
+    changes.push({ key: '_label', oldValue: oldNode.label, newValue: newNode.label });
+  }
+  for (const key of allKeys) {
+    if (oldProps[key] !== newProps[key]) {
+      changes.push({ key, oldValue: oldProps[key], newValue: newProps[key] });
+    }
+  }
+  return changes;
+}
+
+// Returns {
+//   added: [nodeId in newGraph], removed: [nodeId in oldGraph],
+//   changed: [nodeId in newGraph],
+//   propChanges: { [nodeId in newGraph]: [{key, oldValue, newValue}] },
+//   removedInfo: [{typeName, identifier, label}] — oldGraph nodes with no
+//     equivalent id in newGraph to point at, so callers that want to show
+//     "what was removed" (not just a count) use this instead of a live node.
+// }
+// added/changed/propChanges reference newGraph's node ids (what the caller
+// is currently rendering); removed references oldGraph's ids.
 function diffGraphs(oldGraph, newGraph) {
   const oldIndex = buildPathIndex(oldGraph);
   const newIndex = buildPathIndex(newGraph);
@@ -95,19 +121,25 @@ function diffGraphs(oldGraph, newGraph) {
   const added = [];
   const removed = [];
   const changed = [];
+  const propChanges = {};
+  const removedInfo = [];
 
   for (const [key, node] of newIndex) {
     if (!oldIndex.has(key)) {
       added.push(node.id);
     } else if (!propsEqual(oldIndex.get(key), node)) {
       changed.push(node.id);
+      propChanges[node.id] = computePropChanges(oldIndex.get(key), node);
     }
   }
   for (const [key, node] of oldIndex) {
-    if (!newIndex.has(key)) removed.push(node.id);
+    if (!newIndex.has(key)) {
+      removed.push(node.id);
+      removedInfo.push({ typeName: node.typeName, identifier: node.identifier, label: node.label });
+    }
   }
 
-  return { added, removed, changed };
+  return { added, removed, changed, propChanges, removedInfo };
 }
 
 module.exports = { diffGraphs, buildPathIndex };

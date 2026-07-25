@@ -14,17 +14,26 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   containment path + identifier, not by positional node id, so unrelated
   edits elsewhere in the file don't cause spurious diffs). Off by default,
   not persisted across panel restarts. Node-count label shows a
-  `+added ~changed -removed` summary; removed nodes are counted but not yet
-  rendered inline (see known limitations).
+  `+added ~changed -removed` summary.
+- Detail panel shows old→new values (struck-through old, highlighted new)
+  for exactly which properties changed on a selected node, instead of just
+  flagging that it changed.
+- "Changes only" filter toggle — dims every node except added/changed ones
+  (and their ancestors, so the path to a change stays reachable).
+- "Changes" summary panel — a card list of every added/changed/removed
+  node in one place, with inline old→new previews; click a card to jump
+  straight to that node in the tree (added/changed only — removed nodes
+  have no live node to jump to, shown for visibility only).
 
 ### Known limitations (new this release)
 
 - Diff only compares working tree vs `HEAD` — no arbitrary ref-to-ref
   picker yet (planned as a later step: default HEAD now, generalize later).
-- Removed nodes are counted in the summary but not shown as rows in the
-  tree (there's no current-graph node to anchor them to yet).
-- Diff highlighting only applies to Tree/By Type views, not the Graph
-  (canvas) view.
+- Removed nodes appear in the Changes panel and node-count summary but not
+  as rows in the tree itself (there's no current-graph node to anchor them
+  to there).
+- Diff highlighting, the Changes panel, and "Changes only" filtering only
+  apply to Tree/By Type views, not the Graph (canvas) view.
 - Anonymous (no-identifier) sibling nodes are matched by position among
   same-typed siblings — inserting a new anonymous sibling before existing
   ones can misalign matching for those that follow. Identified (named)

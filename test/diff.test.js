@@ -132,6 +132,41 @@ test('diffGraphs matches anonymous same-typed siblings by sibling index', () => 
   assert.deepEqual(result.removed, []);
 });
 
+test('diffGraphs reports which specific property changed, with old and new values', () => {
+  const oldGraph = {
+    nodes: [
+      { id: 'n0', typeName: 'page', identifier: '1', label: 'Home', props: {} },
+      { id: 'n1', typeName: 'button', identifier: 'save', label: 'save', props: { label: 'Save' } },
+    ],
+    edges: [{ from: 'n0', to: 'n1' }],
+  };
+  const newGraph = {
+    nodes: [
+      { id: 'n0', typeName: 'page', identifier: '1', label: 'Home', props: {} },
+      { id: 'n1', typeName: 'button', identifier: 'save', label: 'save', props: { label: 'Save Changes' } },
+    ],
+    edges: [{ from: 'n0', to: 'n1' }],
+  };
+  const result = diffGraphs(oldGraph, newGraph);
+  assert.deepEqual(result.propChanges.n1, [{ key: 'label', oldValue: 'Save', newValue: 'Save Changes' }]);
+});
+
+test('diffGraphs reports removedInfo with type/identifier/label for a removed node', () => {
+  const oldGraph = {
+    nodes: [
+      { id: 'n0', typeName: 'page', identifier: '1', label: 'Home', props: {} },
+      { id: 'n1', typeName: 'button', identifier: 'cancel', label: 'Cancel', props: {} },
+    ],
+    edges: [{ from: 'n0', to: 'n1' }],
+  };
+  const newGraph = {
+    nodes: [{ id: 'n0', typeName: 'page', identifier: '1', label: 'Home', props: {} }],
+    edges: [],
+  };
+  const result = diffGraphs(oldGraph, newGraph);
+  assert.deepEqual(result.removedInfo, [{ typeName: 'button', identifier: 'cancel', label: 'Cancel' }]);
+});
+
 test('diffGraphs on two real fixtures with genuinely different content reports a non-trivial diff', () => {
   const a = parseApxToGraph(fixtureText('p00001-home.apx'));
   const b = parseApxToGraph(fixtureText('p00003-basic-cards.apx'));

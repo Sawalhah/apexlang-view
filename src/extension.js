@@ -65,11 +65,18 @@ async function getGitApi() {
 async function getContentAtHead(uri) {
   try {
     const git = await getGitApi();
-    if (!git) return null;
+    if (!git) {
+      log('getContentAtHead: vscode.git extension not found or has no API');
+      return null;
+    }
     const repository = git.getRepository(uri);
-    if (!repository) return null;
+    if (!repository) {
+      log(`getContentAtHead: no git repository found for ${uri.fsPath} (known repos: ${git.repositories.map((r) => r.rootUri.fsPath).join(', ') || 'none'})`);
+      return null;
+    }
     return await repository.show('HEAD', uri.fsPath);
   } catch (err) {
+    logError(`getContentAtHead: repository.show failed for ${uri.fsPath}`, err);
     return null;
   }
 }
@@ -556,6 +563,8 @@ function getWebviewHtml(webview, mediaUri) {
     <button id="switch-file" title="Pick a different .apx file to view">Switch file…</button>
     <button id="app-map" title="Show a page-to-page navigation map for the whole app">App Map</button>
     <button id="diff-toggle" title="Highlight nodes changed since the last commit (HEAD)">Diff: Off</button>
+    <button id="diff-only-toggle" title="Show only added/changed nodes, dim everything else" class="hidden">Changes only: Off</button>
+    <button id="changes-panel-btn" title="List every added/changed/removed node in one place" class="hidden">Changes (0)</button>
     <button id="view-toggle" title="Toggle between hierarchy tree and grouped-by-type list">View: Tree</button>
     <span id="file-label"></span>
     <span id="node-count"></span>

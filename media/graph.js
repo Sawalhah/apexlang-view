@@ -79,16 +79,32 @@
     vscode.postMessage({ type: 'switchFile' });
   });
   document.getElementById('app-map').addEventListener('click', () => {
+    showingChangesPanel = false;
     vscode.postMessage({ type: 'openAppMap' });
   });
   const diffToggleBtn = document.getElementById('diff-toggle');
   diffToggleBtn.addEventListener('click', () => {
     vscode.postMessage({ type: 'toggleDiff' });
   });
+  const diffOnlyToggleBtn = document.getElementById('diff-only-toggle');
+  const changesPanelBtn = document.getElementById('changes-panel-btn');
+  let diffOnlyMode = false;
+  diffOnlyToggleBtn.addEventListener('click', () => {
+    diffOnlyMode = !diffOnlyMode;
+    diffOnlyToggleBtn.textContent = `Changes only: ${diffOnlyMode ? 'On' : 'Off'}`;
+    if (diffOnlyMode) for (const id of diffAncestorIdsToExpand()) collapsed.delete(id);
+    render();
+  });
+  changesPanelBtn.addEventListener('click', () => {
+    showingChangesPanel = !showingChangesPanel;
+    if (showingChangesPanel) showingAppMap = false;
+    render();
+  });
 
   let currentGraph = null;
   let currentFileName = null;
-  let currentDiff = null; // {added, removed, changed} node-id arrays, or null
+  let currentDiff = null; // {added, removed, changed, propChanges, removedInfo}, or null
+  let showingChangesPanel = false;
   let selectedNodeId = null;
   let collapsed = new Set(); // node ids (or 'type:<typeName>' group ids)
   let searchQuery = '';
@@ -122,6 +138,7 @@
     const msg = event.data;
     if (msg.type === 'fileChanged') {
       showingAppMap = false;
+      showingChangesPanel = false;
       fileLabelEl.textContent = msg.fileName;
       detailPanel.classList.add('hidden');
       selectedNodeId = null;
@@ -144,6 +161,17 @@
       currentFileName = msg.fileName;
       currentDiff = msg.diff || null;
       diffToggleBtn.textContent = msg.diffAgainstHead ? 'Diff: HEAD' : 'Diff: Off';
+      const hasDiff = !!currentDiff;
+      diffOnlyToggleBtn.classList.toggle('hidden', !hasDiff);
+      changesPanelBtn.classList.toggle('hidden', !hasDiff);
+      if (hasDiff) {
+        const totalChanges = currentDiff.added.length + currentDiff.changed.length + currentDiff.removed.length;
+        changesPanelBtn.textContent = `Changes (${totalChanges})`;
+      } else {
+        diffOnlyMode = false;
+        diffOnlyToggleBtn.textContent = 'Changes only: Off';
+        showingChangesPanel = false;
+      }
       fileLabelEl.textContent = msg.fileName;
       nodeCountEl.textContent = currentDiff
         ? `${currentGraph.nodes.length} nodes · +${currentDiff.added.length} ~${currentDiff.changed.length} -${currentDiff.removed.length} vs HEAD`
@@ -195,6 +223,37 @@
       map[e.to] = e.from;
     }
     return map;
+  }
+
+  // Every added/changed node id, PLUS all of their ancestors (so "Changes
+  // only" mode doesn't dim/hide the path needed to reach a change — mirrors
+  // how search's ancestorsToExpand keeps a match reachable).
+  function diffRelevantIds() {
+    const relevant = new Set();
+    if (!currentDiff) return relevant;
+    const parentOf = buildParentMap();
+    for (const id of [...currentDiff.added, ...currentDiff.changed]) {
+      let cur = id;
+      while (cur && !relevant.has(cur)) {
+        relevant.add(cur);
+        cur = parentOf[cur];
+      }
+    }
+    return relevant;
+  }
+
+  function diffAncestorIdsToExpand() {
+    if (!currentDiff) return [];
+    const parentOf = buildParentMap();
+    const ancestors = new Set();
+    for (const id of [...currentDiff.added, ...currentDiff.changed]) {
+      let cur = parentOf[id];
+      while (cur) {
+        ancestors.add(cur);
+        cur = parentOf[cur];
+      }
+    }
+    return [...ancestors];
   }
 
   function buildRoots() {
@@ -295,6 +354,10 @@
       renderAppMap();
       return;
     }
+    if (showingChangesPanel) {
+      renderChangesPanel();
+      return;
+    }
     if (!currentGraph) return;
 
     if (viewMode === 'byType') {
@@ -378,6 +441,86 @@
 
       frag.appendChild(row);
     }
+    treeRoot.appendChild(frag);
+  }
+
+  // Changes summary panel: one card per added/changed/removed node, so you
+  // can scan everything that moved without hunting through the tree. Added/
+  // changed cards jump to the live node (select + reveal); removed cards
+  // aren't clickable (there's no current node to jump to) but still show
+  // what was removed via removedInfo (type/identifier/label from the old
+  // graph — see diff.js).
+  function renderChangesPanel() {
+    if (!currentGraph || !currentDiff) return;
+    const byId = byIdMap();
+    const totalChanges = currentDiff.added.length + currentDiff.changed.length + currentDiff.removed.length;
+    nodeCountEl.textContent = `${totalChanges} change${totalChanges === 1 ? '' : 's'} vs HEAD`;
+
+    const frag = document.createDocumentFragment();
+
+    function addCard(kind, titleText, body) {
+      const card = document.createElement('div');
+      card.className = `changes-card changes-card-${kind}`;
+      const badge = document.createElement('span');
+      badge.className = `changes-card-badge changes-card-badge-${kind}`;
+      badge.textContent = kind === 'added' ? 'Added' : kind === 'changed' ? 'Changed' : 'Removed';
+      card.appendChild(badge);
+      const title = document.createElement('span');
+      title.className = 'changes-card-title';
+      title.textContent = titleText;
+      card.appendChild(title);
+      if (body) card.appendChild(body);
+      frag.appendChild(card);
+      return card;
+    }
+
+    for (const id of currentDiff.added) {
+      const node = byId[id];
+      if (!node) continue;
+      const card = addCard('added', `${node.typeName} ${node.identifier || node.label || ''}`.trim());
+      card.addEventListener('click', () => {
+        showingChangesPanel = false;
+        selectAndReveal(id, { jumpToSource: true });
+      });
+    }
+
+    for (const id of currentDiff.changed) {
+      const node = byId[id];
+      if (!node) continue;
+      const changes = (currentDiff.propChanges && currentDiff.propChanges[id]) || [];
+      const body = document.createElement('div');
+      body.className = 'changes-card-diffs';
+      for (const c of changes.slice(0, 3)) {
+        const line = document.createElement('div');
+        line.className = 'changes-card-diff-line';
+        line.appendChild(document.createTextNode(`${c.key === '_label' ? 'label' : c.key}: `));
+        line.appendChild(diffValueEl(c.oldValue, c.newValue));
+        body.appendChild(line);
+      }
+      if (changes.length > 3) {
+        const more = document.createElement('div');
+        more.className = 'changes-card-diff-line';
+        more.textContent = `+${changes.length - 3} more`;
+        body.appendChild(more);
+      }
+      const card = addCard('changed', `${node.typeName} ${node.identifier || node.label || ''}`.trim(), body);
+      card.addEventListener('click', () => {
+        showingChangesPanel = false;
+        selectAndReveal(id, { jumpToSource: true });
+      });
+    }
+
+    for (const info of currentDiff.removedInfo) {
+      addCard('removed', `${info.typeName} ${info.identifier || info.label || ''}`.trim());
+    }
+
+    if (totalChanges === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'props-empty';
+      empty.textContent = 'No changes vs HEAD';
+      frag.appendChild(empty);
+    }
+
     treeRoot.appendChild(frag);
   }
 
@@ -719,6 +862,7 @@
     if (currentDiff) {
       if (currentDiff.added.includes(node.id)) classes.push('diff-added');
       else if (currentDiff.changed.includes(node.id)) classes.push('diff-changed');
+      if (diffOnlyMode && !diffRelevantIds().has(node.id)) classes.push('dimmed');
     }
     row.className = classes.join(' ');
     row.setAttribute('role', 'treeitem');
@@ -840,11 +984,28 @@
 
   // A real label/value inspector grid instead of a flat "key: value" text
   // dump — same idea as a Figma/VS Code properties panel: consistent label
-  // column, values get their own column so they actually line up.
+  // column, values get their own column so they actually line up. When
+  // this node has propChanges from a git diff (roadmap next-version item),
+  // a changed row shows old→new instead of just the current value.
   function renderPropsGrid(node) {
     detailBody.innerHTML = '';
+    const changesForNode = currentDiff && currentDiff.propChanges ? currentDiff.propChanges[node.id] : null;
+    const changeByKey = new Map((changesForNode || []).map((c) => [c.key, c]));
+
+    const labelChange = changeByKey.get('_label');
+    if (labelChange) {
+      const row = document.createElement('div');
+      row.className = 'props-row props-row-changed';
+      const label = document.createElement('span');
+      label.className = 'props-label';
+      label.textContent = 'label';
+      row.appendChild(label);
+      row.appendChild(diffValueEl(labelChange.oldValue, labelChange.newValue));
+      detailBody.appendChild(row);
+    }
+
     const entries = Object.entries(node.props || {});
-    if (entries.length === 0) {
+    if (entries.length === 0 && !labelChange) {
       const empty = document.createElement('div');
       empty.className = 'props-empty';
       empty.textContent = 'No scalar properties';
@@ -853,17 +1014,43 @@
     }
     for (const [key, value] of entries) {
       const row = document.createElement('div');
-      row.className = 'props-row';
+      const change = changeByKey.get(key);
+      row.className = change ? 'props-row props-row-changed' : 'props-row';
       const label = document.createElement('span');
       label.className = 'props-label';
       label.textContent = key;
-      const val = document.createElement('span');
-      val.className = 'props-value';
-      val.textContent = value;
       row.appendChild(label);
-      row.appendChild(val);
+      row.appendChild(change ? diffValueEl(change.oldValue, value) : plainValueEl(value));
       detailBody.appendChild(row);
     }
+  }
+
+  function plainValueEl(value) {
+    const val = document.createElement('span');
+    val.className = 'props-value';
+    val.textContent = value;
+    return val;
+  }
+
+  // Renders "oldValue → newValue" with the old value struck through — same
+  // restrained pattern as the rest of the detail panel (no new colors
+  // beyond the git-decoration tokens already used for tree-row diff borders).
+  function diffValueEl(oldValue, newValue) {
+    const wrap = document.createElement('span');
+    wrap.className = 'props-value props-value-diff';
+    const oldEl = document.createElement('span');
+    oldEl.className = 'diff-old-value';
+    oldEl.textContent = oldValue === undefined ? '(none)' : oldValue;
+    const arrow = document.createElement('span');
+    arrow.className = 'diff-arrow';
+    arrow.textContent = ' → ';
+    const newEl = document.createElement('span');
+    newEl.className = 'diff-new-value';
+    newEl.textContent = newValue === undefined ? '(none)' : newValue;
+    wrap.appendChild(oldEl);
+    wrap.appendChild(arrow);
+    wrap.appendChild(newEl);
+    return wrap;
   }
 
   function renderBreadcrumb(nodeId) {

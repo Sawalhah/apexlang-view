@@ -563,8 +563,6 @@ function getWebviewHtml(webview, mediaUri) {
     <button id="switch-file" title="Pick a different .apx file to view">Switch file…</button>
     <button id="app-map" title="Show a page-to-page navigation map for the whole app">App Map</button>
     <button id="diff-toggle" title="Highlight nodes changed since the last commit (HEAD)">Diff: Off</button>
-    <button id="diff-only-toggle" title="Show only added/changed nodes, dim everything else" class="hidden">Changes only: Off</button>
-    <button id="changes-panel-btn" title="List every added/changed/removed node in one place" class="hidden">Changes (0)</button>
     <button id="view-toggle" title="Toggle between hierarchy tree and grouped-by-type list">View: Tree</button>
     <span id="file-label"></span>
     <span id="node-count"></span>
@@ -574,7 +572,6 @@ function getWebviewHtml(webview, mediaUri) {
     <button id="collapse-all">Collapse all</button>
   </div>
   <div id="warning-banner" class="hidden"></div>
-  <div id="diff-minimap" class="hidden" title="Diff minimap — click a dot to jump to that node"></div>
   <div id="graph-root"></div>
   <div id="detail-panel" class="hidden">
     <div id="detail-header">

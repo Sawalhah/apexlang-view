@@ -69,7 +69,15 @@
           "when": "resourceExtname == .apx"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "apexlangView.openGraph",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l",
+        "when": "resourceExtname == .apx"
+      }
+    ]
   },
   "scripts": {
     "test": "node --test test/*.test.js",

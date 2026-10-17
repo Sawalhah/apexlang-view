@@ -11,3 +11,4 @@ corpus-report.html
 .gitignore
 .git/**
 **/*.map
+ROADMAP.md

@@ -72,7 +72,6 @@
   const detailBreadcrumb = document.getElementById('detail-breadcrumb');
   const detailRefs = document.getElementById('detail-refs');
   const warningBanner = document.getElementById('warning-banner');
-  const diffMinimapEl = document.getElementById('diff-minimap');
   document.getElementById('detail-close').addEventListener('click', () => {
     detailPanel.classList.add('hidden');
   });
@@ -80,32 +79,16 @@
     vscode.postMessage({ type: 'switchFile' });
   });
   document.getElementById('app-map').addEventListener('click', () => {
-    showingChangesPanel = false;
     vscode.postMessage({ type: 'openAppMap' });
   });
   const diffToggleBtn = document.getElementById('diff-toggle');
   diffToggleBtn.addEventListener('click', () => {
     vscode.postMessage({ type: 'toggleDiff' });
   });
-  const diffOnlyToggleBtn = document.getElementById('diff-only-toggle');
-  const changesPanelBtn = document.getElementById('changes-panel-btn');
-  let diffOnlyMode = false;
-  diffOnlyToggleBtn.addEventListener('click', () => {
-    diffOnlyMode = !diffOnlyMode;
-    diffOnlyToggleBtn.textContent = `Changes only: ${diffOnlyMode ? 'On' : 'Off'}`;
-    if (diffOnlyMode) for (const id of diffAncestorIdsToExpand()) collapsed.delete(id);
-    render();
-  });
-  changesPanelBtn.addEventListener('click', () => {
-    showingChangesPanel = !showingChangesPanel;
-    if (showingChangesPanel) showingAppMap = false;
-    render();
-  });
 
   let currentGraph = null;
   let currentFileName = null;
   let currentDiff = null; // {added, removed, changed, propChanges, removedInfo}, or null
-  let showingChangesPanel = false;
   let selectedNodeId = null;
   let collapsed = new Set(); // node ids (or 'type:<typeName>' group ids)
   let searchQuery = '';
@@ -139,7 +122,6 @@
     const msg = event.data;
     if (msg.type === 'fileChanged') {
       showingAppMap = false;
-      showingChangesPanel = false;
       fileLabelEl.textContent = msg.fileName;
       detailPanel.classList.add('hidden');
       selectedNodeId = null;
@@ -162,22 +144,10 @@
       currentFileName = msg.fileName;
       currentDiff = msg.diff || null;
       diffToggleBtn.textContent = msg.diffAgainstHead ? 'Diff: HEAD' : 'Diff: Off';
-      const hasDiff = !!currentDiff;
-      diffOnlyToggleBtn.classList.toggle('hidden', !hasDiff);
-      changesPanelBtn.classList.toggle('hidden', !hasDiff);
-      if (hasDiff) {
-        const totalChanges = currentDiff.added.length + currentDiff.changed.length + currentDiff.removed.length;
-        changesPanelBtn.textContent = `Changes (${totalChanges})`;
-      } else {
-        diffOnlyMode = false;
-        diffOnlyToggleBtn.textContent = 'Changes only: Off';
-        showingChangesPanel = false;
-      }
       fileLabelEl.textContent = msg.fileName;
       nodeCountEl.textContent = currentDiff
         ? `${currentGraph.nodes.length} nodes · +${currentDiff.added.length} ~${currentDiff.changed.length} -${currentDiff.removed.length} vs HEAD`
         : `${currentGraph.nodes.length} nodes`;
-      renderDiffMinimap();
       if (isNewFile) {
         // Fresh file: start with big same-type sibling groups collapsed
         // (e.g. an interactive report's 20+ columns) so the tree opens
@@ -225,37 +195,6 @@
       map[e.to] = e.from;
     }
     return map;
-  }
-
-  // Every added/changed node id, PLUS all of their ancestors (so "Changes
-  // only" mode doesn't dim/hide the path needed to reach a change — mirrors
-  // how search's ancestorsToExpand keeps a match reachable).
-  function diffRelevantIds() {
-    const relevant = new Set();
-    if (!currentDiff) return relevant;
-    const parentOf = buildParentMap();
-    for (const id of [...currentDiff.added, ...currentDiff.changed]) {
-      let cur = id;
-      while (cur && !relevant.has(cur)) {
-        relevant.add(cur);
-        cur = parentOf[cur];
-      }
-    }
-    return relevant;
-  }
-
-  function diffAncestorIdsToExpand() {
-    if (!currentDiff) return [];
-    const parentOf = buildParentMap();
-    const ancestors = new Set();
-    for (const id of [...currentDiff.added, ...currentDiff.changed]) {
-      let cur = parentOf[id];
-      while (cur) {
-        ancestors.add(cur);
-        cur = parentOf[cur];
-      }
-    }
-    return [...ancestors];
   }
 
   function buildRoots() {
@@ -356,10 +295,6 @@
       renderAppMap();
       return;
     }
-    if (showingChangesPanel) {
-      renderChangesPanel();
-      return;
-    }
     if (!currentGraph) return;
 
     if (viewMode === 'byType') {
@@ -443,158 +378,6 @@
 
       frag.appendChild(row);
     }
-    treeRoot.appendChild(frag);
-  }
-
-  // Changes summary panel: one card per added/changed/removed node, so you
-  // can scan everything that moved without hunting through the tree. Added/
-  // changed cards jump to the live node (select + reveal); removed cards
-  // aren't clickable (there's no current node to jump to) but still show
-  // what was removed via removedInfo (type/identifier/label from the old
-  // graph — see diff.js).
-  // Diff minimap — a small persistent overview (not a toggled view like the
-  // Changes panel): every node as a dot, containment as lines, diff status
-  // as color. Fixed-size box; the SVG viewBox scales real content to fit,
-  // same trick a code minimap uses, so it looks the same whether the file
-  // has 10 nodes or 500.
-  function renderDiffMinimap() {
-    if (!currentDiff || !currentGraph) {
-      diffMinimapEl.classList.add('hidden');
-      diffMinimapEl.innerHTML = '';
-      return;
-    }
-    diffMinimapEl.classList.remove('hidden');
-
-    const childrenOf = buildChildrenMap();
-    const roots = buildRoots();
-    const positions = {};
-    let leafCounter = 0;
-    let maxDepth = 0;
-
-    function assign(nodeId, depth) {
-      maxDepth = Math.max(maxDepth, depth);
-      const kids = childrenOf[nodeId] || [];
-      if (kids.length === 0) {
-        positions[nodeId] = { x: leafCounter, y: depth };
-        leafCounter++;
-      } else {
-        for (const kid of kids) assign(kid, depth + 1);
-        const kidXs = kids.map((k) => positions[k].x);
-        positions[nodeId] = { x: (Math.min(...kidXs) + Math.max(...kidXs)) / 2, y: depth };
-      }
-    }
-    for (const root of roots) assign(root.id, 0);
-
-    const SPACING_X = 10;
-    const SPACING_Y = 16;
-    const PADDING = 6;
-    const width = Math.max(leafCounter - 1, 1) * SPACING_X + PADDING * 2;
-    const height = maxDepth * SPACING_Y + PADDING * 2;
-
-    function diffClassFor(nodeId) {
-      if (currentDiff.added.includes(nodeId)) return 'minimap-added';
-      if (currentDiff.changed.includes(nodeId)) return 'minimap-changed';
-      return 'minimap-unchanged';
-    }
-
-    const byId = byIdMap();
-    const lines = [];
-    const circles = [];
-    for (const [nodeId, pos] of Object.entries(positions)) {
-      const px = pos.x * SPACING_X + PADDING;
-      const py = pos.y * SPACING_Y + PADDING;
-      for (const kidId of childrenOf[nodeId] || []) {
-        const kidPos = positions[kidId];
-        const kx = kidPos.x * SPACING_X + PADDING;
-        const ky = kidPos.y * SPACING_Y + PADDING;
-        lines.push(`<line x1="${px}" y1="${py}" x2="${kx}" y2="${ky}" />`);
-      }
-      circles.push(`<circle cx="${px}" cy="${py}" r="2.5" class="${diffClassFor(nodeId)}" data-node-id="${nodeId}" />`);
-    }
-
-    diffMinimapEl.innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${lines.join('')}${circles.join('')}</svg>`;
-    diffMinimapEl.querySelectorAll('circle').forEach((el) => {
-      el.addEventListener('click', () => {
-        const nodeId = el.dataset.nodeId;
-        if (!byId[nodeId]) return;
-        showingAppMap = false;
-        showingChangesPanel = false;
-        selectAndReveal(nodeId, { jumpToSource: true });
-      });
-    });
-  }
-
-  function renderChangesPanel() {
-    if (!currentGraph || !currentDiff) return;
-    const byId = byIdMap();
-    const totalChanges = currentDiff.added.length + currentDiff.changed.length + currentDiff.removed.length;
-    nodeCountEl.textContent = `${totalChanges} change${totalChanges === 1 ? '' : 's'} vs HEAD`;
-
-    const frag = document.createDocumentFragment();
-
-    function addCard(kind, titleText, body) {
-      const card = document.createElement('div');
-      card.className = `changes-card changes-card-${kind}`;
-      const badge = document.createElement('span');
-      badge.className = `changes-card-badge changes-card-badge-${kind}`;
-      badge.textContent = kind === 'added' ? 'Added' : kind === 'changed' ? 'Changed' : 'Removed';
-      card.appendChild(badge);
-      const title = document.createElement('span');
-      title.className = 'changes-card-title';
-      title.textContent = titleText;
-      card.appendChild(title);
-      if (body) card.appendChild(body);
-      frag.appendChild(card);
-      return card;
-    }
-
-    for (const id of currentDiff.added) {
-      const node = byId[id];
-      if (!node) continue;
-      const card = addCard('added', `${node.typeName} ${node.identifier || node.label || ''}`.trim());
-      card.addEventListener('click', () => {
-        showingChangesPanel = false;
-        selectAndReveal(id, { jumpToSource: true });
-      });
-    }
-
-    for (const id of currentDiff.changed) {
-      const node = byId[id];
-      if (!node) continue;
-      const changes = (currentDiff.propChanges && currentDiff.propChanges[id]) || [];
-      const body = document.createElement('div');
-      body.className = 'changes-card-diffs';
-      for (const c of changes.slice(0, 3)) {
-        const line = document.createElement('div');
-        line.className = 'changes-card-diff-line';
-        line.appendChild(document.createTextNode(`${c.key === '_label' ? 'label' : c.key}: `));
-        line.appendChild(diffValueEl(c.oldValue, c.newValue));
-        body.appendChild(line);
-      }
-      if (changes.length > 3) {
-        const more = document.createElement('div');
-        more.className = 'changes-card-diff-line';
-        more.textContent = `+${changes.length - 3} more`;
-        body.appendChild(more);
-      }
-      const card = addCard('changed', `${node.typeName} ${node.identifier || node.label || ''}`.trim(), body);
-      card.addEventListener('click', () => {
-        showingChangesPanel = false;
-        selectAndReveal(id, { jumpToSource: true });
-      });
-    }
-
-    for (const info of currentDiff.removedInfo) {
-      addCard('removed', `${info.typeName} ${info.identifier || info.label || ''}`.trim());
-    }
-
-    if (totalChanges === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'props-empty';
-      empty.textContent = 'No changes vs HEAD';
-      frag.appendChild(empty);
-    }
-
     treeRoot.appendChild(frag);
   }
 
@@ -936,7 +719,6 @@
     if (currentDiff) {
       if (currentDiff.added.includes(node.id)) classes.push('diff-added');
       else if (currentDiff.changed.includes(node.id)) classes.push('diff-changed');
-      if (diffOnlyMode && !diffRelevantIds().has(node.id)) classes.push('dimmed');
     }
     row.className = classes.join(' ');
     row.setAttribute('role', 'treeitem');

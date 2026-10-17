@@ -58,6 +58,30 @@ Last updated: 2026-10-17
 | D8 | Full whole-app merged graph | 💤 | Long-term goal; deferred. |
 | D9 | Smaller ideas: export PNG/SVG, impact-of-change view, copy reference, pin two nodes to compare, legend filtering | 💤 | Captured, not prioritized. |
 
+## F. Code review of v0.1.0..HEAD (2026-10-17) — fix before releasing 0.2.0
+
+Released code is tagged **`v0.1.0`** (= `c9f84dc`, verified byte-identical to `apexlang-view-0.1.0.vsix`). Everything below is on unreleased work only — 0.1.0 users are unaffected until 0.2.0 ships.
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| F1 | 🔴 High | `media/demo.gif` (13.6 MB) + unused `media/demo.mp4` (2.9 MB) would ship inside the VSIX (39 KB → ~16.5 MB per install). Fix: exclude `media/demo.*` in `.vscodeignore`, delete `demo.mp4`. README's relative GIF link is served from GitHub, so **GitHub `main` must have the GIF before publishing**. | 📋 |
+| F2 | 🔴 High | `package.json` still `0.1.0` — Marketplace would reject the upload. Bump to `0.2.0` at release time. | 📋 |
+| F3 | 🟠 Medium | Changes 0.1.0 look with Diff off: `.tree-row` got `border-left: 3px solid transparent` → every row shifted 3px. Fix: only add the border on `.diff-added`/`.diff-changed` without shifting (e.g. `box-shadow: inset 3px 0 …`). | 📋 |
+| F4 | 🟠 Medium | Race: with Diff on and fast typing, an older refresh (still waiting on git) can overwrite a newer one → stale graph/markers. Fix: refresh sequence number. | 📋 |
+| F5 | 🟠 Medium | Detail panel doesn't re-render when Diff toggles or the graph refreshes → old→new appears/disappears only after re-clicking the node. | 📋 |
+| F6 | 🟠 Medium | Untracked/new file or git not ready → button says "Diff: HEAD" but nothing shows, and an error is logged every keystroke. Fix: show "Diff: not tracked" / "Diff: no git", log once. | 📋 |
+| F7 | 🟡 Low | A property *removed* since HEAD isn't shown in the detail panel (only current props are listed). | 📋 |
+| F8 | 🟡 Low | Duplicate sibling names overwrite each other in diff matching. Real but rare: 29/2,228 corpus files, all theme `template-option-groups.apx`. | 📋 |
+| F9 | 🟡 Low | Renaming via `name:` shows two changed rows (`label` and `name`) for one edit. | 📋 |
+| F10 | ⚪ Cleanup | Perf: `Array.includes` per row → use Sets. Misplaced doc comment above `toggleDiffCommand`; stale "not yet built" comment in `diff.js`; unused `removedInfo` sent every refresh. | 📋 |
+
+**Safe release plan for 0.2.0 (protects 0.1.0 users):**
+1. Fix F1–F10 on `feature/git-diff`; tests stay green; re-run the browser harness + Mohammad's F5 test.
+2. Package locally (`vsce package`), check size is ~40 KB and the file list (`vsce ls`) has no demo media/tests.
+3. Install that `.vsix` in a clean VS Code profile and click through `TESTING-CHECKLIST.md` with Diff **off** (must look/behave exactly like 0.1.0), then with Diff on.
+4. Merge → `dev` → `main`, push (GitHub now has the GIF), tag `v0.2.0`.
+5. Upload to Marketplace. Rollback if needed: re-upload the kept `apexlang-view-0.1.0.vsix` content as `0.2.1` from tag `v0.1.0`.
+
 ## E. Decided against (don't re-propose)
 
 - Separate extension for diff — rejected; keep it in this one.

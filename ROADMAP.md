@@ -75,6 +75,18 @@ Released code is tagged **`v0.1.0`** (= `c9f84dc`, verified byte-identical to `a
 | F9 | 🟡 Low | Renaming via `name:` shows two changed rows (`label` and `name`) for one edit. | 📋 |
 | F10 | ⚪ Cleanup | Perf: `Array.includes` per row → use Sets. Misplaced doc comment above `toggleDiffCommand`; stale "not yet built" comment in `diff.js`; unused `removedInfo` sent every refresh. | 📋 |
 
+**Exact locations / fix notes (from the review, as of commit `f458d4e`):**
+- F1 — `.vscodeignore` (add `media/demo.gif`, `media/demo.mp4`); `git rm media/demo.mp4` (unreferenced anywhere). Webview `localResourceRoots` points at `media/`, which is why everything there ships.
+- F2 — `package.json` `"version": "0.1.0"` → `0.2.0` at release (CHANGELOG already says 0.2.0 Unreleased).
+- F3 — `media/graph.css` ~line 194, inside `.tree-row { … }`: remove `border-left: 3px solid transparent;`. Re-style `.tree-row.diff-added` / `.tree-row.diff-changed` (end of graph.css) so they don't change layout, e.g. `box-shadow: inset 3px 0 0 <git token>`.
+- F4 — `src/extension.js` `refresh()` ~line 482: the only stale guard is `uri.toString() !== currentUri.toString()` (~line 502). Add a module-level `refreshSeq` counter; capture it at the start of refresh, drop the post if it's no longer the latest.
+- F5 — `media/graph.js` `'graph'` message handler ~line 140-170: after updating `currentDiff`/`currentGraph`, if `selectedNodeId` still exists and the detail panel is open, call `showDetail` for it again (and hide it if the node no longer exists).
+- F6 — `src/extension.js` `getContentAtHead()` ~line 65-82: tell untracked/new-file vs no-repo vs git-not-ready apart; send a status to the webview (e.g. `diffStatus: 'untracked' | 'no-repo'`) so the button reads "Diff: not tracked" / "Diff: no git"; log only once per file, not every 400 ms keystroke. Possible fix for git not ready: wait for `git.state === 'initialized'` / `onDidOpenRepository`.
+- F7 — `media/graph.js` `renderPropsGrid` ~line 871: also render keys found in `propChanges[node.id]` that are missing from current `node.props` (`newValue === undefined`); `diffValueEl` already renders undefined as "(none)".
+- F8 — `src/diff.js` `buildPathIndex` ~line 59: `index.set(kidKey, kid)` overwrites duplicate `typeName:identifier` siblings. Fix: if the key already exists, append a `#n` occurrence counter (the same approach anonymous nodes use). Corpus: 29/2,228 files, all `template-option-groups.apx` (`templateOptionGroup:display-mode`, `:color-accents`).
+- F9 — `media/graph.js` ~line 851 + `src/diff.js` `computePropChanges`/`propsEqual`: the label comes from `props.name` (parser.js ~line 256), so a rename yields `_label` + `name` changes. Skip `_label` when it equals the derived name/identifier.
+- F10 — `media/graph.js` `buildRowEl` ~line 720: precompute `addedSet`/`changedSet` when the `'graph'` message arrives. `src/extension.js` ~line 265: move the misplaced App Map doc comment back above `openAppMapCommand`. `src/diff.js` header: delete the stale "extension.js wiring not yet built". Stop sending unused `removedInfo` (or keep it in diff.js for the tests but strip it before postMessage).
+
 **Safe release plan for 0.2.0 (protects 0.1.0 users):**
 1. Fix F1–F10 on `feature/git-diff`; tests stay green; re-run the browser harness + Mohammad's F5 test.
 2. Package locally (`vsce package`), check size is ~40 KB and the file list (`vsce ls`) has no demo media/tests.

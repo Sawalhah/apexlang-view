@@ -5,7 +5,7 @@ Update the status here whenever an item moves; don't rely on chat history.
 
 Status key: ✅ done · 🔨 in progress · ⏳ waiting on Mohammad · 📋 to do · 💤 on hold · ❌ dropped
 
-Last updated: 2026-10-17
+Last updated: 2026-11-19 — **approved design: [docs/DESIGN-v0.2-v0.3.md](docs/DESIGN-v0.2-v0.3.md)** (it supersedes G3/G4 below where they differ)
 
 ---
 
@@ -31,10 +31,9 @@ Last updated: 2026-10-17
 | A11 | Check if a v0.2.0 / GIF version was released | ✅ | Not released. Marketplace, GitHub and installed copy are all 0.1.0 (232 installs, 1× 5★ on 2026-11-19). GIF + video exist only locally on `feature/git-diff` (`1b08d0c`). |
 | A12 | Review what v1 does vs what v2 plans | ✅ | See section G. |
 | A13 | Research what's new in the APEX community (4 months) for v2 | ✅ | See section G. |
-| A14 | **Anonymous logs: installs, bugs, crashes — for improving only** (top priority) | 📋 ⏳ | Plan in G3. Needs Mohammad to create an Azure Application Insights resource (free tier) and choose scope. |
-
-| A15 | Use `/egm:egm-draft` to write a design doc for what we're building | 🔨 | Section-by-section with approval gates. Working file `design_draft.md` → final `docs/DESIGN-v0.2-v0.4.md`. Then `/egm:egm-review` on it. |
-| A16 | v1 had no APEXlang language reference — now Oracle publishes one; use it | 🔨 | Reference: docs.oracle.com/en/database/oracle/apex/26.2/apxln/ (per-component pages + `apexlang.ebnf`). Saved `reference/apexlang-26.1.ebnf` (build 26.1.0+3102) and `reference/apexlang-26.2.ebnf` (build 26.2.0+3479). 26.2 vs 26.1: +163 keywords, −1 (`uiDefaultsReference`). Our parser is generic (no hardcoded component list), so the grammar is for conformance tests + a component/property catalog, not a parser rewrite. **Before packaging: add `reference/**`, `docs/**`, `design_draft.md` to `.vscodeignore`.** |
+| A14 | **Anonymous logs: installs, bugs, crashes — for improving only** (top priority) | 📋 ⏳ | **Decided: PostHog Cloud free plan** via VS Code built-in TelemetryLogger (design G1). **Mohammad:** sign up at posthog.com (no card), choose US or EU region, send the public project key (phc_…). |
+| A15 | Use `/egm:egm-draft` to write a design doc for what we're building | ✅ | All sections approved 2026-11-19. Saved: `docs/DESIGN-v0.2-v0.3.md`. **Next: `/egm:egm-review docs/DESIGN-v0.2-v0.3.md`, then build.** |
+| A16 | v1 had no APEXlang language reference — now Oracle publishes one; use it | 🔨 | Reference: docs.oracle.com/en/database/oracle/apex/26.2/apxln/ (per-component pages + `apexlang.ebnf`). Saved `reference/apexlang-26.1.ebnf` (build 26.1.0+3102) and `reference/apexlang-26.2.ebnf` (build 26.2.0+3479). 26.2 vs 26.1: +163 keywords, −1 (`uiDefaultsReference`). Our parser is generic (no hardcoded component list), so the grammar is for conformance tests + a component/property catalog, not a parser rewrite. Packaging exclusions are in the design (file #16). |
 | A17 | Save the session so resuming needs no searching | ✅ | Pointer added to `MaksabStudio/CLAUDE.md` section 6 (loaded every session) + memory `apexlang_view_resume_point.md`. Resume: start Claude in `MaksabStudio`, type "continue". |
 
 ## G. v1 vs v2 review + research (2026-11-19)
@@ -50,7 +49,7 @@ Problem: released README's "Try it" section tells Marketplace users to "open thi
 - Oracle is publishing the **APEXlang grammar, skills and docs in the public domain** so AI agents (Claude, Codex) can write APEXlang (SiliconANGLE, 2026-11-04). More APEX changes will be AI-generated → people need to *see and review* what changed.
 - Top community pain = **reviewing and merging** `.apx` changes (Alex on APEX, 2026-07-24; juanl.hashnode.dev): comparison only says "page 1 differs", not which components; conflicts, collisions and dangling references are checked by hand; no 3-way merge. A readable text diff ≠ a safe merge.
 
-### G3. Anonymous telemetry plan (A14)
+### G3. Anonymous telemetry plan (A14) — ⚠ SUPERSEDED: design chose PostHog + built-in TelemetryLogger, not Azure
 - Use Microsoft's official `@vscode/extension-telemetry` → Azure Application Insights (free tier). It automatically obeys VS Code's telemetry setting (`isTelemetryEnabled`), so anyone who turned telemetry off sends nothing.
 - Send only: extension activated (version, VS Code version, OS — added by the module), which command/view was used (counts), file size bucket + parse time bucket, and **errors** (error type + our own stack frames only).
 - Never send: file paths, file names, app/page names, `.apx` content, workspace names, git info, user names.
@@ -58,7 +57,7 @@ Problem: released README's "Try it" section tells Marketplace users to "open thi
 - Install/uninstall counts come from the Marketplace publisher Reports page (no code needed); telemetry adds "active users" and crashes, but only for users who update to 0.2.0+.
 - Mohammad's step: create an Application Insights resource in Azure (his Microsoft account) and share the connection string (it's designed to be embedded in public extension code).
 
-### G4. Proposed scope (decide)
+### G4. Proposed scope — ⚠ SUPERSEDED: design chose 2 releases. 0.2.0 = telemetry + diff/F1–F10 + **compare with any past commit** + README + grammar tests; 0.3.0 = branch/PR compare + App Map badges + safety warnings
 - **0.2.0 — "trust + diff"**: telemetry (G3) · git diff vs HEAD (built) · fixes F1–F10 · new README + GIF · Ctrl+Alt+L.
 - **0.3.0 — "review changes"**: compare any two versions (branch / commit / PR) at component level (D4, upgraded) · App Map changed-page badges (D3) · positioning: "see exactly what changed — by you, a teammate, or an AI agent".
 - **0.4.0 — "safety checks"**: Problems-panel warnings Oracle's validator doesn't cover: broken static-file refs (D1), dangling `@references`, duplicate identifiers, merge collisions between two branches (3-way).
@@ -81,7 +80,7 @@ Problem: released README's "Try it" section tells Marketplace users to "open thi
 |---|---|---|---|
 | C1 | Remove rejected diff extras (Changes panel, Changes-only filter, minimap) | ✅ | −341 lines (A3). |
 | C2 | Delete shelved orphan detector (`src/orphan-detector.js`, its test, unregistered `findUnusedComponentsCommand`) | 📋 | Never wired to a command; misleading results on real data. |
-| C3 | Graph (canvas) view — keep or drop? | ⏳ | Largest chunk of `graph.js` (48 KB). **Mohammad decides.** If kept, add diff highlighting (D5). |
+| C3 | Graph (canvas) view — keep or drop? | ✅ | **Decided 2026-11-19: keep unchanged in 0.2.0; telemetry (viewChanged) decides keep/upgrade/drop in 0.3.0.** |
 | C4 | Review `graph.js` for other dead code | 📋 | After C2/C3. |
 
 ## D. Enhancements (candidates)

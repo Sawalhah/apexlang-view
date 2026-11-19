@@ -1,4 +1,5 @@
 # Goldfish Annotated Review Report
+**Status: resolved 2026-11-19** — all 26 PROPOSE FIX items and E1 (US region) applied to the design (FeatureRange). Detailed-plan alignment (items 4, 5, 11, 12, 14, 16) is done in Stage 9.
 
 **Target:** `docs/DESIGN-v0.2-v0.3.md` (lines 1–442, FeatureRange)
 **Inputs:** `critic_report.md` (Stage 7, round 1), plus overlapping open items

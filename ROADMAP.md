@@ -141,3 +141,17 @@ Released code is tagged **`v0.1.0`** (= `c9f84dc`, verified byte-identical to `a
 - `<video>` tag / YouTube link in README — GIF covers both GitHub and Marketplace.
 - "Known limitations" section in README — keep caveats in CHANGELOG only.
 - Orphan detector based on `@identifier` only — too many false positives.
+
+## H. Decisions log (linked from docs/DESIGN-v0.2-v0.3.md)
+
+| Date | Decision | Trade-off that decided it |
+|---|---|---|
+| 2026-07 | Diff stays in this extension; Changes panel / filter / minimap removed (`6123abc`) | Separate install with no shared context; three extra toolbar controls; minimap unreadable at real sizes |
+| 2026-07 | Orphan detector not shipped; `src/orphan-detector.js` deleted in 0.2.0 | Flagged mostly-used components as unused on the sample corpus |
+| 2026-11-19 | Two releases (0.2.0, 0.3.0), not one or three | One release delays first usage data by the whole 0.3.0 build; three triples packaging, testing and uploads |
+| 2026-11-19 | Telemetry via PostHog Cloud free plan, US region | Azure needs a card + written queries; Grafana needs a relay server |
+| 2026-11-19 | Random per-install ID, not `machineId` | `machineId` is shared with every extension on the machine |
+| 2026-11-19 | Graph view unchanged in 0.2.0; 0.3.0 decision rule decides | Dropping breaks existing users without usage data |
+| 2026-11-19 | Grammar used in tests only; no parser rewrite | Regression risk, no user gain, ~50x package size |
+| 2026-11-19 | Compare with any past commit moved into 0.2.0 | Oracle PM's review workflow (thatjeffsmith, 2026-11) has no component-level view |
+| 2026-11-19 | EGM review Stage 7: 26 fixes auto-accepted (jsdom dropped, property allowlist, sender-level off switch, Risks section, 0.3.0 decision rule) | See docs/review/goldfish_review_report.md |

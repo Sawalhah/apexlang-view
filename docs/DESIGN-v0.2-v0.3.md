@@ -1,7 +1,7 @@
 # APEXLang View v0.2.0 – v0.3.0
 
 *   **Author:** sawalhah (Mohammad Sawalhah)
-*   **Status:** Approved by author (pending /egm:egm-review)
+*   **Status:** Approved by author; /egm:egm-review in progress (Stage 7 fixes applied)
 *   **Date:** 2026-11-19
 
 --------------------------------------------------------------------------------
@@ -23,19 +23,20 @@ not one large release and not three small ones):
     with any past commit of it, replace the developer-facing README, and add
     parser tests against Oracle's official grammar. Specified in full.
 *   **0.3.0 — Review and safety.** Compare two arbitrary versions (branch vs
-    branch, pull request), changed-page badges in the App Map, and warnings
-    for problems Oracle's own validator does not report. Released together as
-    one bundle. Specified at outline level.
+    branch, a pull-request branch fetched locally vs its base branch),
+    changed-page badges in the App Map, and warnings for problems Oracle's own
+    validator does not report. Released together as one bundle. Specified at
+    outline level, with a data-based decision rule for its order.
 
 Comparing with any past commit moved from 0.3.0 into 0.2.0 by author, after
 Oracle's SQL Developer product manager showed reviewing AI-agent commits one
 by one as plain text diffs (see The Problem, item 3).
 
-0.3.0 stays at outline level on purpose: which of its parts come first, and
-how far each goes, is decided from 0.2.0 telemetry data, which does not exist
-yet. Rejected by author: releasing everything at once delays the first usage
-data by the whole build time; releasing three times adds release overhead the
-author does not want.
+0.3.0 stays at outline level on purpose: which of its parts come first is
+decided from 0.2.0 telemetry data by the rule in "Decision point for 0.3.0".
+Releasing everything at once would delay the first usage data by the whole
+0.3.0 build; releasing three times would triple the packaging, clean-profile
+testing, and Marketplace uploads (see Alternatives A and B).
 
 ## The Problem
 
@@ -45,104 +46,154 @@ Four problems, in priority order.
 data is the Marketplace install count. We do not know how many of the 232
 installs still use the extension, which features they use, or whether it
 crashes on their files. A parse failure on a real customer file is invisible
-unless someone files a GitHub issue, and nobody has. Every product decision so
-far has been a guess.
+unless someone files a GitHub issue, and nobody has. No product decision so
+far has been based on usage data.
 
-**2. Finished work is not reaching users.** Diff vs HEAD, a keyboard shortcut,
-and a rewritten README with a demo GIF have been built since July but never
-released. The released README tells Marketplace users to "open this folder and
-press F5", which are instructions for the extension's developer, not its users.
-A code review of the unreleased work (ROADMAP section F) found ten problems,
-two of which block release: the demo media would grow the package from 39 KB
-to about 16.5 MB, and the version number was never raised.
+**2. Built but unreleased work is not reaching users.** Diff vs HEAD, a
+keyboard shortcut, and a rewritten README with a demo GIF have been built since
+July but never released. The released README tells Marketplace users to "open
+this folder and press F5", which are instructions for the extension's
+developer, not its users. A code review of the unreleased work (ROADMAP section
+F, listed under G3 below) found ten problems, two of which block release: the
+demo media would grow the package from 39 KB to about 16.5 MB, and the version
+number was never raised.
 
 **3. Reviewing APEX changes is still manual.** APEXlang made APEX applications
-readable as text, but community writing since July (Alex on APEX, 2026-07-24;
-juanl.hashnode.dev) shows the remaining pain: comparing two versions of an app
-reports only that "page 1 differs", not which region, button, or dynamic action
-changed; reference and naming conflicts are checked by reading the source; a
-clean text merge does not guarantee a valid application. This matters more now
-that Oracle publishes the APEXlang grammar so AI agents (Claude, Codex) can
-write APEX applications (SiliconANGLE, 2026-11-04) — more changes will be made
-by tools, and people need to see what those tools changed. Oracle's own
-product manager for SQL Developer shows this workflow (thatjeffsmith.com,
-"Vibe coding an Oracle APEX app via APEXlang, pt2: diffs", 2026-11): an AI
-agent edits and commits APEXlang, and he reviews each commit through VS Code's
-Timeline and plain line-by-line file diffs. There is no component-level view
-of what the agent changed (which region, which query, which tooltip) — the
-reviewer reads raw text. Agent tooling is growing on the writing side:
-APEXREST (github.com/apexrest-dev/apexrest, Apache-2.0) is a Claude Code /
-Codex plugin that writes APEXlang from 389 Oracle 26.2 component definitions,
-previews, validates, and imports it. It has no human review view, which makes
-it a complement to this extension, not a competitor.
+readable as text, but comparing two versions of an app still reports only that
+"page 1 differs", not which region, button, or dynamic action changed.
+Reference and naming conflicts are checked by reading the source, and a clean
+text merge does not guarantee a valid application.
+
+The evidence comes from community writing since July. Alex on APEX
+(2026-07-24) and juanl.hashnode.dev describe the merge and compare pain.
+Oracle's own product manager for SQL Developer shows the review workflow
+(thatjeffsmith.com, "Vibe coding an Oracle APEX app via APEXlang, pt2: diffs",
+2026-11): an AI agent edits and commits APEXlang, and he reviews each commit
+through VS Code's Timeline and plain line-by-line file diffs. There is no
+component-level view of what the agent changed (which region, which query,
+which tooltip); the reviewer reads raw text.
+
+Why now: Oracle publishes the APEXlang grammar so AI agents (Claude, Codex)
+can write APEX applications (SiliconANGLE, 2026-11-04). The share of changes
+made by tools is expected to grow, and people need to see what those tools
+changed.
 
 **4. v1 was built without an official language definition.** The parser was
 hand-written from sample exports because Oracle had not published a grammar.
 Oracle now publishes an APEXlang reference with a downloadable EBNF grammar for
-26.1 and 26.2. We have no test that checks our parser against it, and 26.2
-added 163 keywords we have not verified.
+26.1 and 26.2. We have no test that checks our parser against it. 26.2 added
+163 keywords we have not verified and removed one (`uiDefaultsReference`).
 
 **What we are not solving:** editing assistance. Oracle's SQL Developer for VS
 Code (26.3.1) already provides completion, validation, formatting, and
-import/export for `.apx` files. It does not provide an outline tree,
-component navigation, or a git-based component-level diff — that is the space
-this extension occupies.
+import/export for `.apx` files. Oracle's extension (26.3+) can also compare
+local APEXlang with the application in the database; it does not compare
+against git history or show changes per component. It does not provide an
+outline tree or component navigation either; that is the space this extension
+occupies.
 
 ## Goals
 
 *   **G1 — Anonymous usage and error data.** 0.2.0 reports, without personal
-    data, file paths, or file contents: extension activations (with extension
-    version, VS Code version, OS), counts of each command and view used, parse
-    time and file size in coarse buckets, and errors with their type and our own
-    stack frames. Nothing is sent when VS Code's telemetry is turned off.
-    Data goes to **PostHog Cloud (free plan)**, whose built-in screens answer
-    the three questions the author asked: how many people actively use the
-    extension, which errors they hit, and which views and features they use
-    most. Chosen by author against the criteria "always free, no extra setup,
-    no complication": PostHog's free plan does not expire and needs no credit
-    card, and its dashboards need no query writing. Rejected by author: Azure
-    Application Insights (needs a credit card to open the account, charts
-    need queries in the Azure portal, and the official library adds package
-    weight); Grafana Cloud (its write keys are not meant to be embedded in
-    public code, so it needs a relay server the author would have to run).
+    data, file paths, or file contents, the events in the event table
+    (Technical Plan §1; that table is the full, closed list). Nothing is sent
+    when VS Code's telemetry or this extension's own telemetry setting is
+    turned off. Data goes to **PostHog Cloud (free plan)**, whose built-in
+    screens answer the three questions the author asked: how many people
+    actively use the extension, which errors they hit, and which views and
+    features they use most. Chosen by author against the criteria "free, no
+    extra setup, no complication": PostHog's free plan needs no credit card,
+    has no expiry as of 2026-11, includes 1M events/month, and its dashboards
+    need no query writing. Azure Application Insights and Grafana Cloud were
+    rejected (Alternatives C and D).
+    *   **Region: US (PostHog US Cloud)**, chosen at sign-up. Switching to EU
+        later means a new EU-cloud organization and a new key, with no data
+        migration.
+    *   **Volume:** ~232 installs × ~2 sessions/day × ~15 events ≈ 7,000
+        events/day ≈ 210,000/month, about 21% of the free 1M monthly events.
+
     Privacy and security requirements for G1:
     *   Events go through VS Code's built-in `TelemetryLogger`
         (`vscode.env.createTelemetryLogger`), which enforces the user's VS Code
-        telemetry setting and removes potentially sensitive data; our code only
-        supplies a small sender that posts to PostHog. No third-party
-        telemetry library.
-    *   User identity is a random ID generated by the extension on first run
-        and stored in its own storage — not VS Code's `machineId`, not any
-        account or computer name.
+        telemetry setting and makes a best-effort pass to remove sensitive
+        values; our code only supplies a small sender that posts to PostHog.
+        No third-party telemetry library.
+    *   **Property allowlist:** the sender builds every PostHog payload from an
+        explicit allowlist (event name with any `publisher.extension/` prefix
+        stripped, the properties in the event table, extension version, VS
+        Code version, OS, and the random `distinct_id`) and drops every other
+        key, including VS Code's built-in `common.*` properties
+        (`ignoreBuiltInCommonProperties: true`). The privacy promise does not
+        depend on what VS Code adds.
+    *   **No message text:** no error message text is ever sent. An error event
+        carries only the error `name`, a fixed `where` code from a closed list,
+        and stack frames from our own files reduced to `file.js:line`. Full
+        messages stay in the local output channel.
+    *   **Identity:** no personal identity; one random per-install ID generated
+        by the extension on first run and stored in its own storage. Not VS
+        Code's `machineId`, not any account or computer name.
     *   PostHog project setting to discard IP addresses / location is turned on
         before 0.2.0 ships.
-    *   Only the public, send-only project key is embedded; the personal
-        (read) key never appears in code. Events whose name is not on the
-        published list are ignored in the dashboard.
+    *   **Public key limits:** only the public, send-only project key is
+        embedded; the personal (read) key never appears in code. Because the
+        project key is public, anyone could send fake events. Limits: the
+        sender only sends the closed event list, each install stops at 200
+        events per VS Code session, and the PostHog project stays on the free
+        plan with no card, so overuse can never be billed.
     *   A `telemetry.json` file and a README "Privacy" section list every event
         and property.
-*   **G2 — No visible change for existing users.** With Diff off, 0.2.0 renders
-    every `.apx` file in the test corpus identically to 0.1.0 (tag `v0.1.0`),
-    and every 0.1.0 command keeps its ID and behavior.
-*   **G3 — Diff vs HEAD ships correct.** All ten review findings (F1–F10) are
-    fixed, and the package is under 100 KB.
+*   **G2 — No visible change for existing users.** With Diff off, 0.2.0 shows
+    the same rows, order, labels, icons, and indentation as 0.1.0 (tag
+    `v0.1.0`), and every 0.1.0 command keeps its ID and behavior. Allowed
+    additions: the Diff button, the ▾ compare button, the `compareWithCommit`
+    command, and the telemetry setting.
+*   **G3 — Diff vs HEAD: findings fixed, package under 100 KB.** All ten
+    review findings (ROADMAP section F) are fixed:
+
+    | ID | Finding |
+    |---|---|
+    | F1 | Demo media included in the package |
+    | F2 | Version not bumped |
+    | F3 | Diff row marker shifts rows by 3px |
+    | F4 | Stale refresh can overwrite a newer one |
+    | F5 | Detail panel not refreshed after a new graph |
+    | F6 | Unclear diff state, plus log spam |
+    | F7 | Removed properties hidden |
+    | F8 | Duplicate names overwrite each other |
+    | F9 | A rename shows as two changes |
+    | F10 | Slow lookups, stale comments, unused `removedInfo` |
+
 *   **G3b — Compare with any past commit.** From the panel, the user picks one
     of the last 50 commits that touched the current file; the tree highlights
     what changed between that commit and the working copy, with the same
     added/changed markers and old → new values as Diff vs HEAD.
-*   **G4 — Parser verified against Oracle's grammar.** A test checks that every
-    component and property keyword in the 26.1 and 26.2 grammars is parsed
-    without error, and the full sample corpus (2,228 files) parses with zero
-    hard errors on 26.1 and 26.2 exports.
+*   **G4 — Parser verified against Oracle's grammar.** The *sample corpus* is
+    the APEX 26.1 sample apps: 2,228 `.apx` files, stored outside the repo at
+    `apex_podman/apex-apps`. Tests that need it skip, not fail, when it is
+    absent. A file is *suspicious* when `assessParseQuality` flags its parse as
+    likely wrong (unexpected characters or garbage type names).
+    *   **G4a** — every `typeName` the parser produces on the sample corpus is
+        a component keyword in Oracle's 26.1 or 26.2 grammar, and the parser
+        parses all 2,228 files without error and none is suspicious.
+    *   **G4b** — the parser handles each syntax form the grammar defines
+        (strings with escapes, `//` and `/* */` comments, arrays, fenced
+        ``` code, nested groups), each tested with a minimal example.
+    *   **G4c** (only if a 26.2 export is obtained before release) — the same
+        check on that export; otherwise noted as unverified in the CHANGELOG.
 *   **G5 — README for users.** The Marketplace page explains what the extension
     does and how to use it, with the demo GIF, and states what telemetry
-    collects.
+    collects. The README links the GIF by relative path; when packaging,
+    `vsce` rewrites relative links to the GitHub repository in `package.json`,
+    so `media/demo.gif` must be on GitHub `main` before the Marketplace upload
+    (release checklist item).
 *   **G6 (0.3.0, outline)** — Compare two arbitrary versions (branch vs
-    branch, pull request) at component level, and show changed pages in the
-    App Map.
+    branch, a pull-request branch fetched locally vs its base branch) at
+    component level, and show changed pages in the App Map.
 *   **G7 (0.3.0, outline)** — Warn about problems Oracle's validator does not
     report (broken static-file references, dangling `@references`, duplicate
-    names), each check validated on the real corpus before it ships.
+    names where APEX requires unique ones; legitimate repeats such as
+    `templateOptionGroup` are excluded), each check validated on the sample
+    corpus before it ships.
 
 ## Non-Goals
 
@@ -152,30 +203,25 @@ this extension occupies.
 *   **Shipping the grammar inside the extension.** Each EBNF file is about
     1.9 MB; it is used in development and tests only.
 *   **Rewriting the parser from the grammar.** The current parser is generic (it
-    reads any block and property name), handles the 2,228-file corpus, and the
-    grammar is used to test it, not replace it.
+    reads any block and property name), parses all 2,228 sample-corpus files
+    without error, and the grammar is used to test it, not replace it.
 *   **Telemetry about the user or their application:** no file names, paths,
-    page or component names, `.apx` content, workspace names, git data, or
-    user identity.
+    page or component names, `.apx` content, workspace names, git data, error
+    message text, or personal identity.
 *   **A full three-way merge tool.** 0.3.0 shows differences; it does not
     write merged files.
 *   **Changes to the Graph (canvas) view in 0.2.0.** It ships in 0.1.0 and stays
     unchanged (no Diff highlighting there yet). Decided by author: telemetry
     counts how often it is opened, and 0.3.0 decides keep, upgrade, or drop
-    from that data.
+    by the rule in "Decision point for 0.3.0".
 
 ## Open Questions
 
-*   **PostHog account:** Mohammad signs up for PostHog Cloud (free plan, no
-    card) and shares the project key, which is designed to be public in client
-    code. Region (US or EU) chosen at sign-up.
-*   **Reach of the data:** only users who update to 0.2.0 and have VS Code
-    telemetry on are counted; installs and uninstalls come from the Marketplace
-    Reports page instead.
-*   **Depth of 0.3.0:** kept at outline level until 0.2.0 telemetry has run for
-    a period to be decided.
-*   **26.2 corpus:** no real 26.2 export is available locally; Goal G4's 26.2
-    half needs one app exported from a 26.2 instance.
+*   **PostHog project key:** when will the US-cloud project key (`phc_…`) be
+    shared? It is designed to be public in client code; the build can use a
+    placeholder until then.
+*   **26.2 sample:** can one app be exported from a 26.2 instance before
+    release, so G4c can run?
 
 ## Technical Plan (Architecture)
 
@@ -188,77 +234,104 @@ graph (`{nodes, edges}`), and posts the graph to a webview. `media/graph.js`
 only through messages:
 
 *   webview → extension: `ready`, `revealLine`, `switchFile`, `openAppMap`,
-    `toggleDiff`, `openExternalPage`, `error`, `log`
+    `toggleDiff`, `openExternalPage`, `error`
 *   extension → webview: `fileChanged`, `graph`, `appMap`
 
 `parser.js` has not changed since 0.1.0 (`git diff v0.1.0..HEAD` shows no
 change to it), so parse output for any file is identical to 0.1.0.
 
+Terms: a *panel session* runs from opening the APEXLang View panel to closing
+it; a *VS Code session* is the lifetime of one VS Code window.
+
 ### 0.2.0 additions
 
 ```text
- VS Code side (src/)                                Webview (media/graph.js)
- ┌─────────────────────────────┐   messages         ┌──────────────────────┐
- │ extension.js                │ <───────────────── │ ready, revealLine,   │
- │  commands, refresh(), diff  │   + viewChanged    │ ... + viewChanged,   │
- │        │  track(...)         │   + featureUsed    │   featureUsed (new)  │
- │        v                     │                    │ error (existing)     │
+ VS Code side (src/)                                 Webview (media/graph.js)
+ ┌──────────────────────────────┐                    ┌──────────────────────┐
+ │ extension.js                 │ <── ready, revealLine, switchFile,       │
+ │  commands (incl.             │     openAppMap, toggleDiff,              │
+ │  compareWithCommit),         │     compareWithCommit, openExternalPage, │
+ │  refresh(), diff             │     error, viewChanged, featureUsed      │
+ │        │ track / trackError  │ ──> fileChanged, graph (+ diffStatus),   │
+ │        v                     │     appMap                               │
  │ telemetry.js (new)           │                    └──────────────────────┘
  │  vscode.env.createTelemetryLogger(sender)
  │    - VS Code drops events if the user's telemetry is off
- │    - VS Code strips potentially sensitive values
- │  posthog-sender.js (new): queue → HTTPS POST (global fetch, Node 18+)
- └──────────────┬──────────────┘
+ │  posthog-sender.js (new)
+ │    - checks apexlangView.telemetry.enabled on every send
+ │    - property allowlist, 200-event cap
+ │    - queue → HTTPS POST (Node https module)
+ └──────────────┬───────────────┘
                 v
-        PostHog Cloud (free plan): dashboards for users, features, errors
+        PostHog US Cloud (free plan): dashboards for users, features, errors
 ```
 
 **1. Telemetry (G1).**
 
 *   `src/telemetry.js` owns one `TelemetryLogger`, created with
-    `vscode.env.createTelemetryLogger(sender, { ignoreUnhandledErrors: false })`
-    so VS Code also forwards unhandled errors thrown from our extension code.
-    It exposes `track(event, props)` and `trackError(where, err)`. Every call
-    first checks our own setting `apexlangView.telemetry.enabled`; VS Code's
-    own setting is enforced by the logger itself.
+    `vscode.env.createTelemetryLogger(sender, { ignoreUnhandledErrors: false,
+    ignoreBuiltInCommonProperties: true })` so VS Code also forwards unhandled
+    errors thrown from our extension code. It exposes `track(event, props)`
+    and `trackError(where, err)`.
+*   **Off switch:** the sender checks `apexlangView.telemetry.enabled` on every
+    `sendEventData` / `sendErrorData` call (read live from configuration), so
+    no event of any kind, including forwarded unhandled errors, leaves when it
+    is off. `track()` and `trackError()` do not check it themselves. VS Code's
+    own setting is enforced by the logger.
 *   `src/posthog-sender.js` implements VS Code's `TelemetrySender`
     (`sendEventData`, `sendErrorData`, `flush`). It queues events and sends
     them in one HTTPS POST to PostHog's batch endpoint every 30 seconds, when
-    20 events are queued, and on `flush()` at deactivation. Errors are sent as
-    PostHog `$exception` events so they appear in PostHog's Error tracking
-    screen. Every event sets `$process_person_profile: false` (anonymous
-    event, no person profile). Network failures are dropped silently after one
-    5-second timeout; telemetry never shows an error to the user and never
-    blocks the UI.
+    20 events are queued, and on `flush()` at deactivation. It uses Node's
+    `https` module rather than global `fetch`, because VS Code applies the
+    user's proxy settings (`http.proxy`) to `https` requests from extensions;
+    users behind proxies VS Code cannot pass are not counted (known bias, see
+    Risks). Errors are sent as PostHog `$exception` events so they appear in
+    PostHog's Error tracking screen. Every event sets
+    `$process_person_profile: false` (anonymous event, no person profile).
+*   **Failure handling:** one attempt per batch, 5-second timeout, no retry;
+    on failure the batch is dropped. Telemetry never shows an error to the
+    user and never blocks the UI.
+*   **Error capture paths:** (a) explicit `trackError` at our own catch sites;
+    (b) the webview `error` message; (c) the logger's own forwarding of
+    unhandled errors, which VS Code limits to our extension. The process-wide
+    `uncaughtException` / `unhandledRejection` handlers keep logging to the
+    output channel only and never send telemetry. The sender drops any
+    exception with no stack frame from our files, and sends each distinct
+    error (name + top own frame) at most once per VS Code session.
+*   **Allowlist:** the sender builds each payload only from the keys listed in
+    G1 and in the table below, strips any `publisher.extension/` prefix from
+    the event name, and drops everything else.
 *   Anonymous ID: a random UUID generated on first activation and stored in
     `context.globalState`; used as PostHog's `distinct_id`.
 *   Event list (closed; anything else is a bug):
 
 | Event | Properties | Sent when |
 |---|---|---|
-| `activated` | — (VS Code adds extension version, VS Code version, OS) | extension activates |
-| `command` | `name`: openGraph, switchFile, openAppMap, toggleDiff, showLogs | a command runs (palette, button, or toolbar) |
+| `activated` | `extVersion`, `vscodeVersion` (`vscode.version`), `os` (`process.platform`) | extension activates |
+| `command` | `name`: openGraph, switchFile, openAppMap, toggleDiff, compareWithCommit, showLogs; for `compareWithCommit` also `refAge`: `HEAD~1`, `≤10 back`, `>10 back` | a command runs (palette, button, or toolbar) |
 | `viewChanged` | `view`: tree, byType, graph | the View toggle is clicked |
 | `featureUsed` | `name`: search, jumpToSource, openExternalPage, breadcrumb | first use of that feature per panel session |
-| `fileParsed` | `sizeBucket` (<10KB, <100KB, <1MB, ≥1MB), `msBucket` (<50, <200, <1000, ≥1000), `nodeBucket` (<50, <500, ≥500), `suspicious` (bool) | first parse of a file per panel session — not on every keystroke |
-| `$exception` | `where`: extension or webview; error name; stack frames from our own files only, reduced to file basename + line | `logError`, webview `error` message, or an unhandled error |
+| `fileParsed` | `sizeBucket` (<10KB, <100KB, <1MB, ≥1MB), `msBucket` (time in `parseApxToGraph` only: <50, <200, <1000, ≥1000), `nodeBucket` (<50, <500, ≥500), `suspicious` (bool) | first parse of a file per panel session — not on every keystroke |
+| `$exception` | `name` (error name only, never the message); `where`: closed list (`refresh.parse`, `refresh.diff`, `git.show`, `git.log`, `appMap.scan`, `webview.render`, `unhandled`); stack frames from our own files as `file.js:line` (webview frames reduced from `vscode-webview://…/graph.js` to `graph.js:line`) | a `trackError` call, a webview `error` message (which gains a `name` field), or an unhandled error from our code |
 
 *   Rate cap: at most 200 events per VS Code session; further events are
     dropped.
-*   Configuration constants (PostHog host for the chosen region, public
-    project key) live in `src/telemetry-config.js`.
+*   Configuration constants (PostHog US host, public project key) live in
+    `src/telemetry-config.js`.
 
 **2. Diff vs HEAD hardening (G3).** Fix F1–F10 from ROADMAP section F, inside
-the existing files. The architectural ones:
+the existing files. The ones that change structure:
 
 *   F4 (stale refresh): `refresh()` takes a sequence number at its start and
     posts only if it is still the latest.
 *   F5 (detail panel not updating): the `graph` message handler re-renders the
     open detail panel for the selected node, or closes it if the node is gone.
-*   F6 (diff state unclear): `getContentAtHead` returns a reason (`untracked`,
-    `noRepo`, `gitNotReady`) instead of `null`; the extension sends
-    `diffStatus` with the `graph` message; the button shows "Diff: not
-    tracked" / "Diff: no git"; the reason is logged once per file.
+*   F6 (diff state unclear): `getContentAtRef` returns a reason (`untracked`,
+    `noRepo`, `notInCommit`) instead of `null`; the extension sends
+    `diffStatus` with the `graph` message; the reason is logged once per file.
+    If git is still loading, the extension waits for it (up to 5 seconds)
+    before reading. User-visible states are only "Diff: not tracked",
+    "Diff: no git", and "Diff: not in a1b2c3d".
 *   F3 (3px shift): the diff row marker becomes an inset box-shadow, which
     takes no layout space, so rows render at their 0.1.0 position when Diff is
     off.
@@ -276,39 +349,49 @@ the existing files. The architectural ones:
 *   `getContentAtHead(uri)` becomes `getContentAtRef(uri, ref)`, using
     `repository.show(ref, path)`; the rest of the pipeline (`parseApxToGraph`,
     `diffGraphs`, the `graph` message) is unchanged.
+*   **Base cache:** the base file text is cached per (commit hash, path).
+    `HEAD` is resolved to a hash first, and the cache entry is dropped when the
+    repository's HEAD changes, so typing does no git work after the first
+    read. F4's sequence guard stays as a backup.
+*   **Renames:** history does not follow renames (VS Code's git API `log` and
+    `show` use the current path). Commits from before a rename are not listed,
+    and a chosen commit where the file did not exist shows "Diff: not in
+    a1b2c3d". Renamed-file history is a known limit.
 *   The button reads "Diff: HEAD" or "Diff: a1b2c3d"; clicking it while on
-    toggles diff off. The chosen ref resets to off when the panel switches
-    file.
-*   Telemetry: `command` event gains `compareWithCommit`.
+    toggles diff off.
+*   **File switch:** when the panel switches file, Diff vs HEAD stays on (as
+    today); a specific chosen commit resets to HEAD, because that commit
+    belongs to the previous file's history. The CHANGELOG states this.
 
 **3. Grammar conformance (G4).** Tests only; nothing grammar-related ships.
 
-*   `test/grammar-catalog.js` (test helper) reads
-    `reference/apexlang-26.x.ebnf`, collects every component keyword (the
-    first quoted string of each production listed under `<component>`) and
-    every property keyword.
-*   Test A — every grammar component keyword, written as a minimal block
-    (`<keyword> x (\n)`), parses into a node with that `typeName`.
-*   Test B — every `typeName` the parser produces across the real corpus is a
-    keyword in the 26.1 or 26.2 grammar. A name outside the grammar means the
-    parser misread a file.
-*   Test C — the 26.2 grammar's new keywords (163) parse as property names
-    inside a block.
+*   A keyword list is generated once from `reference/apexlang-26.1.ebnf` and
+    `apexlang-26.2.ebnf` (every component keyword: the first quoted string of
+    each production listed under `<component>`) into a committed JSON file
+    under `test/`.
+*   G4a check: in `test/corpus.test.js`, every `typeName` the parser produces
+    across the sample corpus is in that list, and no file is suspicious.
+*   G4b check: one minimal example per syntax form, parsed and asserted.
+*   No per-keyword parse test: the parser does not look at keywords, so such a
+    test could not fail.
 
-**4. Unchanged-for-existing-users check (G2).** A test renders the same parsed
-corpus files with the 0.1.0 webview (`graph.js` and `graph.css` read from tag
-`v0.1.0` via `git show`) and the 0.2.0 webview (Diff off) in a DOM emulator
-(`jsdom`, dev-only dependency, not shipped) and compares the visible tree:
-row order, labels, classes, and indentation. The only allowed difference is
-the new Diff button in the toolbar.
+**4. Unchanged-for-existing-users check (G2).** A test parses `graph.css` from
+tag `v0.1.0` (via `git show`) and from the working copy, and fails if any rule
+that applies to `.tree-row`, its children, or the toolbar changed in a layout
+property (margin, padding, border, width, height, position, display), except
+rules for the diff classes, which may only use `box-shadow`. Plus a required
+release step: open the same files side by side in 0.1.0 and 0.2.0 (Diff off)
+in a clean profile. No `jsdom` dependency (see Alternative N).
 
 **5. Packaging and docs (G3, G5).** `.vscodeignore` excludes demo media,
-`reference/`, `docs/`, `design_draft.md`, and `ROADMAP.md`. New README section
-"Privacy"; new `telemetry.json`; `package.json` gets version 0.2.0 and the
+`reference/`, `docs/`, and `ROADMAP.md`. New README section "Privacy"; new
+`telemetry.json`; `package.json` gets version 0.2.0 and the
 `apexlangView.telemetry.enabled` setting (tagged `telemetry`,
 `usesOnlineServices`). The packaged size check (< 100 KB) runs before upload.
+`media/demo.gif` is pushed to GitHub `main` before the Marketplace upload (G5).
+The unwired `src/orphan-detector.js` is deleted (Alternative I).
 
-### 0.3.0 outline (shape only; detail after 0.2.0 data)
+### 0.3.0 outline (shape only; order set by the decision point)
 
 *   **Compare two versions (G6):** extends the 0.2.0 commit picker to two
     arbitrary refs (branches and tags via `repository.getRefs`); both sides
@@ -317,7 +400,21 @@ the new Diff button in the toolbar.
 *   **Safety warnings (G7):** results go to VS Code's Problems panel through
     a `DiagnosticCollection` labeled "APEXLang View", so they sit next to, not
     on top of, Oracle's own diagnostics. Each check ships only after it shows
-    zero false positives on the 2,228-file corpus.
+    zero false positives on the 2,228-file sample corpus.
+
+#### Decision point for 0.3.0
+
+Taken 6 weeks after 0.2.0 ships, or when 30 distinct weekly users are
+reached, whichever is later (capped at 10 weeks). The numbers are the author's
+starting proposal and can be changed before the decision.
+
+1.  If `compareWithCommit` is used by ≥20% of weekly users, branch/PR compare
+    (G6) goes first; otherwise safety warnings (G7) go first.
+2.  If the Graph view accounts for <5% of `viewChanged` events, it is dropped
+    in 0.3.0; at ≥15% it gains diff highlighting; otherwise it stays
+    unchanged.
+3.  Fallback if there are fewer than 30 weekly users by week 10: G6 then G7,
+    Graph view unchanged.
 
 ## Alternatives Considered
 
@@ -325,19 +422,22 @@ the new Diff button in the toolbar.
 
 *   **Pros**: One version bump, one upload, one announcement with visible new
     features.
-*   **Cons**: Usage data starts only after the whole build (about 5–7 working
-    sessions instead of 1–2); 0.3.0 would be built on guesses; a bad safety
-    warning would force rolling back everything.
-*   **Reason for Rejection**: Rejected by author: delays the telemetry, which
-    the author ranked most important.
+*   **Cons**: Usage data starts only after the whole build (the author's
+    estimate: about 5–7 working sessions instead of 1–2); 0.3.0 would be built
+    without data; a bad safety warning would force rolling back everything.
+*   **Reason for Rejection**: The first usage data would be delayed by the
+    whole 0.3.0 build. (Decision recorded in [ROADMAP.md](../ROADMAP.md),
+    section H.)
 
 ### Alternative B: Three releases (0.2.0, 0.3.0, 0.4.0)
 
 *   **Pros**: Smallest change per release; easiest to tell which change broke
     something.
 *   **Cons**: Most release overhead.
-*   **Reason for Rejection**: Rejected by author: does not want frequent
-    releases.
+*   **Reason for Rejection**: Three version bumps, three packaging and
+    clean-profile test passes, and three Marketplace uploads, for features that
+    do not depend on each other's data. (Decision recorded in
+    [ROADMAP.md](../ROADMAP.md), section H.)
 
 ### Alternative C: Azure Application Insights for telemetry
 
@@ -346,25 +446,27 @@ the new Diff button in the toolbar.
 *   **Cons**: Account needs a credit card; charts need queries written in the
     Azure portal; the library is the extension's first runtime dependency and
     would need a bundling step to keep the package small.
-*   **Reason for Rejection**: Rejected by author: fails "always free, no extra
-    setup, no complication".
+*   **Reason for Rejection**: Needs a credit card and written queries for
+    every chart, against the criteria "free, no extra setup, no
+    complication". (Decision recorded in [ROADMAP.md](../ROADMAP.md),
+    section H.)
 
 ### Alternative D: Grafana Cloud for telemetry
 
 *   **Pros**: The Grafana dashboards the author first asked about.
 *   **Cons**: Its write keys are not meant to be embedded in public code, so a
     relay server between the extension and Grafana is required.
-*   **Reason for Rejection**: Rejected by author: a server to run is extra
-    setup and complication.
+*   **Reason for Rejection**: Requires running a relay server. (Decision
+    recorded in [ROADMAP.md](../ROADMAP.md), section H.)
 
 ### Alternative E: VS Code's `machineId` as the anonymous user ID
 
 *   **Pros**: Already provided by VS Code; no storage needed.
 *   **Cons**: The same value is visible to every extension on the machine, so
     it could link our data with other data sets.
-*   **Reason for Rejection**: Rejected by author (approved privacy
-    requirements in G1): a random ID created by this extension cannot be
-    linked to anything else.
+*   **Reason for Rejection**: A random ID created by this extension is not
+    shared with other extensions and not derived from machine or account data.
+    (Decision recorded in [ROADMAP.md](../ROADMAP.md), section H.)
 
 ### Alternative F: Drop the Graph (canvas) view, or add Diff to it, in 0.2.0
 
@@ -372,38 +474,85 @@ the new Diff button in the toolbar.
     makes all three views consistent.
 *   **Cons**: Dropping removes a view 0.1.0 users have (breaks G2); both are
     decided without usage data.
-*   **Reason for Rejection**: Rejected by author: keep it unchanged and let
-    telemetry decide in 0.3.0.
+*   **Reason for Rejection**: Removes a view existing users have (breaks G2)
+    without data on its use; the decision point for 0.3.0 settles it.
+    (Decision recorded in [ROADMAP.md](../ROADMAP.md), section H.)
 
 ### Alternative G: Rewrite the parser from Oracle's grammar, or ship the grammar for live checks
 
 *   **Pros**: Parser matches Oracle's definition by construction; live
     checks could flag unknown properties.
-*   **Cons**: The current generic parser already handles the 2,228-file
-    corpus; a rewrite risks regressions for no user-visible gain; each grammar
-    file is about 1.9 MB, roughly 50 times the current package; Oracle's own
-    extension already validates properties.
-*   **Reason for Rejection**: Rejected by author (approved Non-Goals): the
-    grammar is used in tests only.
+*   **Cons**: The current generic parser already parses all 2,228 sample-corpus
+    files without error; a rewrite risks regressions for no user-visible gain;
+    each grammar file is about 1.9 MB, roughly 50 times the current package;
+    Oracle's own extension already validates properties.
+*   **Reason for Rejection**: Regression risk with no user-visible gain, and a
+    package about 50 times larger. (Decision recorded in
+    [ROADMAP.md](../ROADMAP.md), section H.)
 
 ### Alternative H: Earlier diff ideas — separate extension, Changes panel, Changes-only filter, diff minimap
 
 *   **Pros**: More ways to scan changes.
 *   **Cons**: A separate extension means a second install with no shared
-    context; the panel, filter, and minimap cluttered the toolbar and the
-    minimap was unreadable at real file sizes.
-*   **Reason for Rejection**: Rejected by author (July 2026, after seeing them
-    built); code removed in commit `6123abc`.
+    context; the panel, filter, and minimap added three toolbar controls, and
+    the minimap could not show individual changes at real file sizes.
+*   **Reason for Rejection**: Three extra toolbar controls and a minimap that
+    could not show changes at real file sizes (July 2026, after seeing them
+    built); code removed in commit `6123abc`. (Decision recorded in
+    [ROADMAP.md](../ROADMAP.md), sections E and H.)
 
 ### Alternative I: Unused-component ("orphan") detector based on `@identifier` references
 
 *   **Pros**: Cheap to build on the existing reference resolver.
-*   **Cons**: On the real corpus most shared components are referenced by
+*   **Cons**: On the sample corpus most shared components are referenced by
     plain name, not `@identifier`, so it flagged mostly-used components as
     unused.
-*   **Reason for Rejection**: Rejected by author (July 2026, after corpus
-    data); `src/orphan-detector.js` is left unwired and is removed in this
-    work.
+*   **Reason for Rejection**: Flagged mostly-used components as unused on the
+    sample corpus (July 2026); `src/orphan-detector.js` is left unwired and is
+    deleted in this work. (Decision recorded in [ROADMAP.md](../ROADMAP.md),
+    sections E and H.)
+
+### Alternative J: Timeline "Show component changes" action instead of a commit picker
+
+*   **Pros**: Reuses VS Code's own commit list, the workflow in the
+    thatjeffsmith post.
+*   **Cons**: VS Code does not document what a git Timeline item passes to a
+    contributed command, so the commit hash may not be reliably available; the
+    built-in Timeline item shape can change between versions.
+*   **Reason for Rejection**: Unverified dependency on undocumented data.
+    Re-checked during the build: if the commit hash is available, the Timeline
+    action is added alongside the picker.
+
+### Alternative K: Opt-in telemetry (off until the user turns it on)
+
+*   **Pros**: Strongest consent model.
+*   **Cons**: Almost no one opts in, so the data could not answer the three
+    questions.
+*   **Reason for Rejection**: Could not answer the three questions. The design
+    follows VS Code's convention of obeying the user's global telemetry
+    setting, plus an extra off switch.
+
+### Alternative L: PostHog's Node client (`posthog-node`) instead of a custom sender
+
+*   **Pros**: Maintained by PostHog; handles batching.
+*   **Cons**: The extension's first runtime dependency, plus a bundling step;
+    it would still need the allowlist.
+*   **Reason for Rejection**: Adds a runtime dependency and a build step
+    without removing any of our own code.
+
+### Alternative M: Per-event rate limits instead of one 200-event cap
+
+*   **Pros**: Finer control per event type.
+*   **Cons**: More state to keep for a few hundred users.
+*   **Reason for Rejection**: The single cap already protects the free quota.
+
+### Alternative N: jsdom DOM comparison for G2
+
+*   **Pros**: Compares the actual rendered tree.
+*   **Cons**: jsdom does no layout, so it could not have caught F3 (a 3px
+    shift); adds a dev dependency.
+*   **Reason for Rejection**: Cannot detect the layout changes G2 is about;
+    replaced by the CSS-rule test plus a manual side-by-side check.
 
 ## Non-Functional Requirements
 
@@ -411,32 +560,55 @@ the new Diff button in the toolbar.
     sending is asynchronous, batched, and dropped on any network error.
 *   **Package size:** under 100 KB (0.1.0 is 39 KB). No runtime dependencies
     are added.
-*   **Compatibility:** `engines.vscode` stays `^1.85.0` (Node 18, so global
-    `fetch` and `createTelemetryLogger` are available).
-*   **Rollback:** tag `v0.1.0` and the kept `apexlang-view-0.1.0.vsix`. If
-    0.2.0 misbehaves, rebuild from `v0.1.0` and publish it as 0.2.1. Telemetry
-    can be cut without a release by revoking the PostHog project key.
+*   **Compatibility:** `engines.vscode` stays `^1.85.0`; the VS Code 1.85 API
+    provides `createTelemetryLogger`, and its Node 18 runtime provides the
+    `https` module and `crypto.randomUUID`.
+*   **Rollback:** see Risks & Mitigations, item 8.
+
+## Risks & Mitigations
+
+| # | Risk | Mitigation |
+|---|---|---|
+| 1 | Fake events sent with the public project key | Closed event list; 200-event cap per session; free plan with no card, so overuse cannot be billed; event definitions reviewed in PostHog. Revoking the key is one-way: all installed copies stop sending until a new release. |
+| 2 | Free quota (1M events/month) exhausted | Volume estimate ≈ 210,000/month (G1); 200-event cap; first-parse-only `fileParsed`. |
+| 3 | Too little data to decide 0.3.0 | Decision rule with a 10-week cap and a fixed fallback order. |
+| 4 | Reach of the data: only users who update to 0.2.0, have telemetry on, and can reach PostHog through VS Code's proxy settings are counted | Known bias, stated in the README; installs and uninstalls come from the Marketplace Reports page. |
+| 5 | Git failures: no repo, untracked file, shallow clone, file absent at the chosen commit, detached HEAD, git still loading | Explicit states ("Diff: no git", "Diff: not tracked", "Diff: not in a1b2c3d"); wait up to 5 seconds for git to load; HEAD resolved to a hash. |
+| 6 | Other extensions' errors reported as ours | Single capture path through the logger (limited to our extension); process-wide handlers never send; exceptions without an own-file frame dropped. |
+| 7 | Visible regression for 0.1.0 users | CSS-rule test against tag `v0.1.0` plus a manual side-by-side check in a clean profile. |
+| 8 | 0.2.0 misbehaves after release | Tag `v0.1.0` and the kept VSIX at `tools/apexlang-view/apexlang-view-0.1.0.vsix`: rebuild from `v0.1.0` and publish it as 0.2.1. Telemetry can be cut without a release by revoking the key (see item 1). |
+| 9 | Unnamed sibling components matched by position in the diff | Known limit: inserting an unnamed sibling can show later siblings as changed. |
+| 10 | Renamed files lose history before the rename | Known limit, documented in the CHANGELOG. |
 
 --------------------------------------------------------------------------------
 
-### Additional Resources
+## Additional Resources
 
-*   `ROADMAP.md` — every request, decision, and review finding (sections A–G).
+*   [ROADMAP.md](../ROADMAP.md) — every request, decision (section H), and
+    review finding (sections A–H).
 *   Oracle APEXlang reference and grammar:
-    https://docs.oracle.com/en/database/oracle/apex/26.2/apxln/
+    [docs.oracle.com/en/database/oracle/apex/26.2/apxln/](https://docs.oracle.com/en/database/oracle/apex/26.2/apxln/)
 *   VS Code telemetry guide:
-    https://code.visualstudio.com/api/extension-guides/telemetry
-*   Alex on APEX, "Merging APEX Working Copies with APEXlang" (2026-07-24).
+    [code.visualstudio.com/api/extension-guides/telemetry](https://code.visualstudio.com/api/extension-guides/telemetry)
+*   Alex on APEX, "Merging APEX Working Copies with APEXlang" (2026-07-24):
+    [alexonapex.com](https://alexonapex.com/blog/2026/07/24/merging-apex-working-copies-with-apexlang/)
 *   thatjeffsmith.com, "Vibe coding an Oracle APEX app via APEXlang, pt2:
-    diffs" (2026-11).
-*   APEXREST: https://github.com/apexrest-dev/apexrest
+    diffs" (2026-11):
+    [thatjeffsmith.com](https://www.thatjeffsmith.com/archive/2026/11/vibe-coding-an-oracle-apex-app-via-apexlang-pt2-diffs/)
+*   juanl, APEXlang and version control:
+    [juanl.hashnode.dev](https://juanl.hashnode.dev/apexlang-oracle-apex-control-versiones)
+*   SiliconANGLE, "Vibe coding meets governance" (2026-11-04):
+    [siliconangle.com](https://siliconangle.com/2026/11/04/vibe-coding-meets-governance-apexlang-abstraction-oracleaiworld/)
+*   Related tool — APEXREST, a Claude Code / Codex plugin that writes,
+    previews, validates, and imports APEXlang from 389 Oracle 26.2 component
+    definitions (Apache-2.0). It has no human review view, so it complements
+    this extension:
+    [github.com/apexrest-dev/apexrest](https://github.com/apexrest-dev/apexrest)
 
-### Future Improvements
+## Future Improvements
 
 *   **Component catalog from Oracle's reference:** descriptions and allowed
     values per property, shown in the detail panel.
-*   **Timeline integration:** "Show component changes" on a commit in VS
-    Code's Timeline view, matching the workflow in the thatjeffsmith post.
 
 --------------------------------------------------------------------------------
 

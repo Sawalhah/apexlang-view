@@ -106,9 +106,9 @@ Released code is tagged **`v0.1.0`** (= `c9f84dc`, verified byte-identical to `a
 | F1 | 🔴 High | `media/demo.gif` (13.6 MB) + unused `media/demo.mp4` (2.9 MB) would ship inside the VSIX (39 KB → ~16.5 MB per install). Fix: exclude `media/demo.*` in `.vscodeignore`, delete `demo.mp4`. README's relative GIF link is served from GitHub, so **GitHub `main` must have the GIF before publishing**. | 🔨 demo.mp4 deleted (phase 1); .vscodeignore in phase 5 |
 | F2 | 🔴 High | `package.json` still `0.1.0` — Marketplace would reject the upload. Bump to `0.2.0` at release time. | 📋 |
 | F3 | 🟠 Medium | Changes 0.1.0 look with Diff off: `.tree-row` got `border-left: 3px solid transparent` → every row shifted 3px. Fix: only add the border on `.diff-added`/`.diff-changed` without shifting (e.g. `box-shadow: inset 3px 0 …`). | ✅ 0.2.0 phase 1 |
-| F4 | 🟠 Medium | Race: with Diff on and fast typing, an older refresh (still waiting on git) can overwrite a newer one → stale graph/markers. Fix: refresh sequence number. | 📋 |
+| F4 | 🟠 Medium | Race: with Diff on and fast typing, an older refresh (still waiting on git) can overwrite a newer one → stale graph/markers. Fix: refresh sequence number. | ✅ 0.2.0 phase 2 |
 | F5 | 🟠 Medium | Detail panel doesn't re-render when Diff toggles or the graph refreshes → old→new appears/disappears only after re-clicking the node. | ✅ 0.2.0 phase 1 |
-| F6 | 🟠 Medium | Untracked/new file or git not ready → button says "Diff: HEAD" but nothing shows, and an error is logged every keystroke. Fix: show "Diff: not tracked" / "Diff: no git", log once. | 📋 |
+| F6 | 🟠 Medium | Untracked/new file or git not ready → button says "Diff: HEAD" but nothing shows, and an error is logged every keystroke. Fix: show "Diff: not tracked" / "Diff: no git", log once. | ✅ 0.2.0 phase 2 |
 | F7 | 🟡 Low | A property *removed* since HEAD isn't shown in the detail panel (only current props are listed). | ✅ 0.2.0 phase 1 |
 | F8 | 🟡 Low | Duplicate sibling names overwrite each other in diff matching. Real but rare: 29/2,228 corpus files, all theme `template-option-groups.apx`. | ✅ 0.2.0 phase 1 |
 | F9 | 🟡 Low | Renaming via `name:` shows two changed rows (`label` and `name`) for one edit. | ✅ 0.2.0 phase 1 |

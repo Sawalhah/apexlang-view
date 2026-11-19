@@ -53,6 +53,10 @@
       {
         "command": "apexlangView.toggleDiff",
         "title": "APEXLang View: Toggle Diff vs HEAD"
+      },
+      {
+        "command": "apexlangView.compareWithCommit",
+        "title": "APEXLang View: Compare with Commit…"
       }
     ],
     "menus": {

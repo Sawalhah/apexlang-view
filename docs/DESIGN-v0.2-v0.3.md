@@ -814,9 +814,11 @@ by file; this is the order to build them in.
             the variable.
         *   `show` fails and the ref was `'HEAD'` → `{ reason: 'untracked' }`
             (covers new and staged-but-uncommitted files); `show` fails with
-            a chosen hash → `{ reason: 'notInCommit' }`. Any other exception
-            (not a git "path does not exist" error) → `trackError('git.show')`
-            and `{ reason: 'noRepo' }`.
+            a chosen hash → `{ reason: 'notInCommit' }`. This mapping applies
+            to every `show` failure so the button label stays useful; a
+            failure that is not git's "path does not exist / not in" wording
+            is also logged in full and sent as `trackError('git.show')`
+            (changed during the build, phase 2).
         *   Log the reason once per file and ref.
     *   **`graph` message** (line 503): remove `diffAgainstHead`; add
         `diffStatus: { ref: null | 'HEAD' | fullHash, reason?: 'untracked' |

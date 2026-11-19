@@ -35,6 +35,13 @@ html, body {
   font-size: 11px;
 }
 
+/* The "Compare with commit…" arrow next to the Diff button: same toolbar
+   button look, just narrow. */
+#toolbar #diff-pick {
+  padding: 3px 5px;
+  margin-left: -10px;
+}
+
 #toolbar button:hover {
   background: var(--vscode-button-secondaryHoverBackground, #4a4a4a);
 }

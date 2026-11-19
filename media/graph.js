@@ -85,6 +85,24 @@
   diffToggleBtn.addEventListener('click', () => {
     vscode.postMessage({ type: 'toggleDiff' });
   });
+  document.getElementById('diff-pick').addEventListener('click', () => {
+    vscode.postMessage({ type: 'compareWithCommit' });
+  });
+
+  // Short label for what the working copy is compared with: "HEAD" or the
+  // first 7 characters of a commit hash.
+  function refLabel(ref) {
+    return ref === 'HEAD' ? 'HEAD' : String(ref).slice(0, 7);
+  }
+
+  // Diff button text from the extension's diffStatus ({ref, reason?}).
+  function diffButtonLabel(status) {
+    if (!status || !status.ref) return 'Diff: Off';
+    if (status.reason === 'untracked') return 'Diff: not tracked';
+    if (status.reason === 'noRepo') return 'Diff: no git';
+    if (status.reason === 'notInCommit') return `Diff: not in ${refLabel(status.ref)}`;
+    return `Diff: ${refLabel(status.ref)}`;
+  }
 
   let currentGraph = null;
   let currentFileName = null;
@@ -148,10 +166,10 @@
       currentDiff = msg.diff || null;
       addedSet = new Set(currentDiff ? currentDiff.added : []);
       changedSet = new Set(currentDiff ? currentDiff.changed : []);
-      diffToggleBtn.textContent = msg.diffAgainstHead ? 'Diff: HEAD' : 'Diff: Off';
+      diffToggleBtn.textContent = diffButtonLabel(msg.diffStatus);
       fileLabelEl.textContent = msg.fileName;
       nodeCountEl.textContent = currentDiff
-        ? `${currentGraph.nodes.length} nodes · +${currentDiff.added.length} ~${currentDiff.changed.length} -${currentDiff.removed.length} vs HEAD`
+        ? `${currentGraph.nodes.length} nodes · +${currentDiff.added.length} ~${currentDiff.changed.length} -${currentDiff.removed.length} vs ${refLabel(msg.diffStatus.ref)}`
         : `${currentGraph.nodes.length} nodes`;
       if (isNewFile) {
         // Fresh file: start with big same-type sibling groups collapsed

@@ -41,42 +41,117 @@ let panel = null;
 let currentUri = null;
 let debounceTimer = null;
 
-// Git-diff indicators (next-version feature, agreed 2026-07-25 office-hours
-// session, step 1 of the roadmap): off by default, toggled per-session (not
-// persisted) via the toolbar/command. When on, refresh() additionally fetches
-// the current file's content at HEAD via VS Code's built-in Git extension API
-// (no shell-out needed) and diffs it against the working-tree parse using
-// diff.js's pure diffGraphs.
-let diffAgainstHead = false;
+// Git-diff indicators: off by default, toggled per-session (not persisted)
+// via the toolbar/command. diffRef is what the working copy is compared
+// against: null (Diff off), 'HEAD', or a full commit hash picked with
+// "Compare with Commit...". When set, refresh() fetches the file's content
+// at that ref via VS Code's built-in Git extension API (no shell-out) and
+// diffs it against the working-tree parse using diff.js's pure diffGraphs.
+let diffRef = null;
+
+// Short, human label for a ref: "HEAD" or the first 7 characters of a hash.
+function refLabel(ref) {
+  return ref === 'HEAD' ? 'HEAD' : String(ref).slice(0, 7);
+}
 
 // Lazily resolved — the built-in git extension may not be activated yet
-// (e.g. no git repo open at all) the first time this is called.
+// (e.g. no git repo open at all) the first time this is called. While the
+// git extension is still starting up, its API reports state 'uninitialized'
+// and knows no repositories yet; wait for it once (up to 5 seconds) so the
+// first diff right after VS Code starts isn't wrongly reported as "no git".
+// This waits for git itself, never for a repository to appear, so files
+// outside any repo don't stall later refreshes.
+let gitReadyWait = null;
 async function getGitApi() {
   const gitExtension = vscode.extensions.getExtension('vscode.git');
   if (!gitExtension) return null;
   const exports = gitExtension.isActive ? gitExtension.exports : await gitExtension.activate();
-  return exports.getAPI(1);
+  const api = exports.getAPI(1);
+  if (api.state && api.state !== 'initialized' && typeof api.onDidChangeState === 'function') {
+    if (!gitReadyWait) {
+      gitReadyWait = new Promise((resolve) => {
+        let timer = null;
+        let sub = null;
+        const done = () => {
+          clearTimeout(timer);
+          if (sub) sub.dispose();
+          resolve();
+        };
+        sub = api.onDidChangeState((state) => {
+          if (state === 'initialized') done();
+        });
+        timer = setTimeout(done, 5000);
+      });
+    }
+    await gitReadyWait;
+  }
+  return api;
 }
 
-// Returns the file's content at HEAD, or null if there's no git repo for
-// this file, the file isn't tracked yet (new/untracked), or any other git
-// error occurs — all treated as "nothing to diff against", not a hard failure.
-async function getContentAtHead(uri) {
+// The base text for the diff, cached so live typing does no git work after
+// the first read. Keyed by the RESOLVED commit hash (never the moving name
+// 'HEAD'), so an entry can never go stale: a new commit means a new hash and
+// a cache miss. Only one entry is kept (the current file); replaced on miss.
+let baseCache = null; // { hash, path, text }
+
+// Each "why there is no diff" reason is logged once per file + ref instead
+// of on every keystroke (F6).
+const loggedDiffReasons = new Set();
+function logDiffReasonOnce(uri, ref, reason, detail) {
+  const key = `${uri.fsPath}|${ref}|${reason}`;
+  if (loggedDiffReasons.has(key)) return;
+  loggedDiffReasons.add(key);
+  log(`Diff vs ${refLabel(ref)} unavailable for ${path.basename(uri.fsPath)}: ${reason}${detail ? ' (' + detail + ')' : ''}`);
+}
+
+// git reports a file missing at a commit as "path ... does not exist in
+// '<ref>'" or "... exists on disk, but not in '<ref>'".
+function isPathNotInCommitError(err) {
+  const text = `${err && err.message ? err.message : ''} ${err && err.stderr ? err.stderr : ''}`;
+  return /does not exist in|exists on disk, but not in/i.test(text);
+}
+
+// Returns { text } — the file's content at `ref` ('HEAD' or a commit hash) —
+// or { reason } explaining why there is nothing to diff against:
+//   noRepo      — no git extension, or the file is not in a repository
+//   untracked   — compared with HEAD, but the file is not committed yet
+//                 (new, untracked, or staged but not committed)
+//   notInCommit — the chosen commit doesn't contain this file (or the repo
+//                 has no commits yet)
+async function getContentAtRef(uri, ref) {
+  const git = await getGitApi();
+  if (!git) {
+    logDiffReasonOnce(uri, ref, 'noRepo', 'vscode.git extension not found');
+    return { reason: 'noRepo' };
+  }
+  const repository = git.getRepository(uri);
+  if (!repository) {
+    logDiffReasonOnce(uri, ref, 'noRepo', `known repos: ${git.repositories.map((r) => r.rootUri.fsPath).join(', ') || 'none'}`);
+    return { reason: 'noRepo' };
+  }
+  const hash = ref === 'HEAD' ? repository.state.HEAD && repository.state.HEAD.commit : ref;
+  if (!hash) {
+    logDiffReasonOnce(uri, ref, 'notInCommit', 'repository has no commits');
+    return { reason: 'notInCommit' };
+  }
+  if (baseCache && baseCache.hash === hash && baseCache.path === uri.fsPath) {
+    return { text: baseCache.text };
+  }
   try {
-    const git = await getGitApi();
-    if (!git) {
-      log('getContentAtHead: vscode.git extension not found or has no API');
-      return null;
-    }
-    const repository = git.getRepository(uri);
-    if (!repository) {
-      log(`getContentAtHead: no git repository found for ${uri.fsPath} (known repos: ${git.repositories.map((r) => r.rootUri.fsPath).join(', ') || 'none'})`);
-      return null;
-    }
-    return await repository.show('HEAD', uri.fsPath);
+    const text = await repository.show(hash, uri.fsPath);
+    baseCache = { hash, path: uri.fsPath, text };
+    return { text };
   } catch (err) {
-    logError(`getContentAtHead: repository.show failed for ${uri.fsPath}`, err);
-    return null;
+    // Whatever git's wording, a failed read at HEAD means "not committed
+    // yet" and at a chosen commit means "not in that commit", so the button
+    // label stays useful. Unexpected errors are also logged in full.
+    const reason = ref === 'HEAD' ? 'untracked' : 'notInCommit';
+    if (isPathNotInCommitError(err)) {
+      logDiffReasonOnce(uri, ref, reason);
+    } else {
+      logError(`getContentAtRef: repository.show(${refLabel(ref)}) failed for ${uri.fsPath}`, err);
+    }
+    return { reason };
   }
 }
 
@@ -173,6 +248,17 @@ function activate(context) {
     })
   );
 
+  context.subscriptions.push(
+    vscode.commands.registerCommand('apexlangView.compareWithCommit', async () => {
+      try {
+        await compareWithCommitCommand();
+      } catch (err) {
+        logError('apexlangView.compareWithCommit failed', err);
+        vscode.window.showErrorMessage(`APEXLang View: unexpected error — ${err.message}. See "APEXLang View" output channel for details.`);
+      }
+    })
+  );
+
   // Live refresh: re-parse on edits to whichever file the panel currently
   // shows. Registered once (not per-panel) since currentUri now changes
   // over the panel's lifetime instead of being fixed at creation.
@@ -257,11 +343,61 @@ async function switchFileCommand(context) {
   }
 }
 
-// Flips Diff vs HEAD on/off and re-renders the current file.
+// Diff button: any comparison on (HEAD or a chosen commit) -> off;
+// off -> compare with HEAD. Re-renders the current file.
 async function toggleDiffCommand() {
-  diffAgainstHead = !diffAgainstHead;
-  log(`Diff vs HEAD: ${diffAgainstHead ? 'on' : 'off'}`);
+  diffRef = diffRef ? null : 'HEAD';
+  log(diffRef ? 'Diff vs HEAD: on' : 'Diff: off');
   if (currentUri) await refresh(currentUri);
+}
+
+// "Compare with Commit...": pick one of the last 50 commits that touched the
+// current file; the tree then highlights what changed between that commit
+// and the working copy (same markers as Diff vs HEAD).
+async function compareWithCommitCommand() {
+  if (!panel || !currentUri) {
+    vscode.window.showWarningMessage('APEXLang View: open an .apx file in the APEXLang View panel first.');
+    return;
+  }
+  const uri = currentUri;
+  const git = await getGitApi();
+  const repository = git && git.getRepository(uri);
+  if (!repository) {
+    vscode.window.showInformationMessage('APEXLang View: this file is not in a git repository.');
+    return;
+  }
+
+  let commits;
+  try {
+    commits = await repository.log({ path: uri.fsPath, maxEntries: 50 });
+  } catch (err) {
+    logError(`compareWithCommit: repository.log failed for ${uri.fsPath}`, err);
+    vscode.window.showInformationMessage('APEXLang View: could not read the git history of this file. See the "APEXLang View" output channel.');
+    return;
+  }
+  if (!commits || commits.length === 0) {
+    vscode.window.showInformationMessage('APEXLang View: no commits for this file yet.');
+    return;
+  }
+
+  const items = commits.map((c) => {
+    const date = c.authorDate || c.commitDate;
+    return {
+      label: `${c.hash.slice(0, 7)}  ${(c.message || '').split('\n')[0]}`,
+      description: date ? new Date(date).toISOString().slice(0, 10) : '',
+      hash: c.hash,
+    };
+  });
+  const picked = await vscode.window.showQuickPick(items, {
+    placeHolder: `Compare ${path.basename(uri.fsPath)} with a commit (last ${commits.length} that changed it)`,
+    matchOnDescription: true,
+  });
+  if (!picked) return;
+  if (!panel || !currentUri || currentUri.toString() !== uri.toString()) return;
+
+  diffRef = picked.hash;
+  log(`Diff vs ${refLabel(diffRef)}: on`);
+  await refresh(currentUri);
 }
 
 // Scans the whole app root for .apx files, builds a page-to-page nav map
@@ -338,6 +474,10 @@ async function createPanelAndShow(context, targetUri) {
       toggleDiffCommand().catch((err) => logError('toggleDiff from toolbar failed', err));
       return;
     }
+    if (msg.type === 'compareWithCommit') {
+      compareWithCommitCommand().catch((err) => logError('compareWithCommit from toolbar failed', err));
+      return;
+    }
     if (msg.type === 'openExternalPage' && msg.targetFsPath) {
       confirmAndOpenExternalPage(context, msg.targetFsPath, msg.label).catch((err) => logError('openExternalPage failed', err));
       return;
@@ -345,10 +485,6 @@ async function createPanelAndShow(context, targetUri) {
     if (msg.type === 'error') {
       log(`Webview error: ${msg.message}`);
       if (msg.stack) log(msg.stack);
-      return;
-    }
-    if (msg.type === 'log') {
-      log(`Webview: ${msg.message}`);
     }
   });
 
@@ -364,6 +500,14 @@ async function createPanelAndShow(context, targetUri) {
 
 // Points the (already-open) panel at a new file and refreshes it.
 async function switchTo(context, uri) {
+  // A chosen commit belongs to the previous file's history, so switching to
+  // a different file falls back to comparing with HEAD. Diff off and Diff vs
+  // HEAD carry over unchanged.
+  const isNewFile = !currentUri || currentUri.toString() !== uri.toString();
+  if (isNewFile && diffRef && diffRef !== 'HEAD') {
+    log(`Diff vs ${refLabel(diffRef)} reset to HEAD for the new file`);
+    diffRef = 'HEAD';
+  }
   currentUri = uri;
   const fileName = path.basename(uri.fsPath);
   panel.title = `Graph: ${fileName}`;
@@ -376,8 +520,13 @@ async function switchTo(context, uri) {
 // Called on open/switch, on every debounced live edit, and again whenever
 // the webview signals it's ready to receive (covers the race where
 // postMessage fires before the webview's message listener is attached).
+// F4: every refresh takes a sequence number; only the latest one may post,
+// so a slow refresh (e.g. still waiting on git) can't overwrite a newer one.
+let refreshSeq = 0;
+
 async function refresh(uri) {
   if (!panel || !uri) return;
+  const seq = ++refreshSeq;
   const fileName = path.basename(uri.fsPath);
   const startedAt = Date.now();
 
@@ -423,29 +572,33 @@ async function refresh(uri) {
   }
 
   let diff = null;
-  if (diffAgainstHead) {
+  const ref = diffRef;
+  const diffStatus = { ref };
+  if (ref) {
     try {
-      const headText = await getContentAtHead(uri);
-      // null covers: no git repo, untracked/new file, or any git error —
-      // all "nothing to diff against", not a failure worth surfacing.
-      if (headText !== null) {
-        const headGraph = parseApxToGraph(headText);
+      const base = await getContentAtRef(uri, ref);
+      if (base.reason) {
+        diffStatus.reason = base.reason;
+      } else {
+        const baseGraph = parseApxToGraph(base.text);
         // removedInfo is not used by the webview (F10); keep the message small.
-        const { removedInfo, ...forWebview } = diffGraphs(headGraph, graph);
+        const { removedInfo, ...forWebview } = diffGraphs(baseGraph, graph);
         diff = forWebview;
       }
     } catch (err) {
-      logError(`refresh(${fileName}): diff vs HEAD failed`, err);
+      logError(`refresh(${fileName}): diff vs ${refLabel(ref)} failed`, err);
     }
   }
 
   const quality = assessParseQuality(text, graph);
   const ms = Date.now() - startedAt;
-  log(`refresh(${fileName}): ${graph.nodes.length} nodes, ${graph.edges.length} edges, ${ms}ms${quality.suspicious ? ' [suspicious: ' + quality.reasons.join(' ') + ']' : ''}${diff ? ` [diff vs HEAD: +${diff.added.length} ~${diff.changed.length} -${diff.removed.length}]` : ''}`);
-  // Guard against a slow parse finishing after the user has already
-  // switched to a different file — don't clobber the panel with stale data.
+  log(`refresh(${fileName}): ${graph.nodes.length} nodes, ${graph.edges.length} edges, ${ms}ms${quality.suspicious ? ' [suspicious: ' + quality.reasons.join(' ') + ']' : ''}${diff ? ` [diff vs ${refLabel(ref)}: +${diff.added.length} ~${diff.changed.length} -${diff.removed.length}]` : ''}`);
+  // Guard against a slow refresh finishing after a newer one started, or
+  // after the user switched files or closed the panel — don't clobber the
+  // panel with stale data.
+  if (seq !== refreshSeq || !panel) return;
   if (uri.toString() !== (currentUri && currentUri.toString())) return;
-  panel.webview.postMessage({ type: 'graph', fileName, graph, quality, diff, diffAgainstHead });
+  panel.webview.postMessage({ type: 'graph', fileName, graph, quality, diff, diffStatus });
 }
 
 // Confirms before actually switching the graph to a nav-target stub's page
@@ -507,7 +660,8 @@ function getWebviewHtml(webview, mediaUri) {
   <div id="toolbar">
     <button id="switch-file" title="Pick a different .apx file to view">Switch file…</button>
     <button id="app-map" title="Show a page-to-page navigation map for the whole app">App Map</button>
-    <button id="diff-toggle" title="Highlight nodes changed since the last commit (HEAD)">Diff: Off</button>
+    <button id="diff-toggle" title="Highlight nodes changed since the last commit (HEAD); click again to turn off">Diff: Off</button>
+    <button id="diff-pick" title="Compare with commit…">▾</button>
     <button id="view-toggle" title="Toggle between hierarchy tree and grouped-by-type list">View: Tree</button>
     <span id="file-label"></span>
     <span id="node-count"></span>

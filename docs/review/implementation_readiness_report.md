@@ -1,5 +1,6 @@
 # Stage 9: Implementation Readiness Report
-n**Status: resolved 2026-11-20** - all I1-I26 applied to the design.
+
+**Status: resolved 2026-11-20** - all I1-I26 applied to the design.
 
 *   **Target:** `docs/DESIGN-v0.2-v0.3.md`, DetailedRange lines 634–925 (after alignment commit `cdcd1d8`)
 *   **Reviewers:** egm-implementation-readiness (R), egm-codebase-details (K), egm-style (S). Duplicates merged; source IDs kept.

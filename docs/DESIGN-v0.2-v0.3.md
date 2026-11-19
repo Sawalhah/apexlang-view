@@ -274,11 +274,10 @@ it; a *VS Code session* is the lifetime of one VS Code window.
 
 **1. Telemetry (G1).**
 
-*   `src/telemetry.js` owns one `TelemetryLogger`, created with
-    `vscode.env.createTelemetryLogger(sender, { ignoreUnhandledErrors: false,
-    ignoreBuiltInCommonProperties: true })` so VS Code also forwards unhandled
-    errors thrown from our extension code. It exposes `track(event, props)`
-    and `trackError(where, err)`.
+*   `src/telemetry.js` owns one `TelemetryLogger` built with
+    `vscode.env.createTelemetryLogger`, set so VS Code forwards unhandled
+    errors from our extension code and adds none of its built-in common
+    properties. It exposes `track(event, props)` and `trackError(where, err)`.
 *   **Off switch:** the sender checks `apexlangView.telemetry.enabled` on every
     `sendEventData` / `sendErrorData` call (read live from configuration), so
     no event of any kind, including forwarded unhandled errors, leaves when it
@@ -286,16 +285,16 @@ it; a *VS Code session* is the lifetime of one VS Code window.
     own setting is enforced by the logger.
 *   `src/posthog-sender.js` implements VS Code's `TelemetrySender`
     (`sendEventData`, `sendErrorData`, `flush`). It queues events and sends
-    them in one HTTPS POST to PostHog's batch endpoint every 30 seconds, when
-    20 events are queued, and on `flush()` at deactivation. It uses Node's
+    them in batches to PostHog's batch endpoint, including a final flush at
+    deactivation. It uses Node's
     `https` module rather than global `fetch`, because VS Code applies the
     user's proxy settings (`http.proxy`) to `https` requests from extensions;
     users behind proxies VS Code cannot pass are not counted (known bias, see
     Risks). Errors are sent as PostHog `$exception` events so they appear in
-    PostHog's Error tracking screen. Every event sets
-    `$process_person_profile: false` (anonymous event, no person profile).
-*   **Failure handling:** one attempt per batch, 5-second timeout, no retry;
-    on failure the batch is dropped. Telemetry never shows an error to the
+    PostHog's Error tracking screen. Every event is marked as anonymous, so
+    PostHog creates no person profile.
+*   **Failure handling:** one attempt per batch with a short timeout, no
+    retry; on failure the batch is dropped. Telemetry never shows an error to the
     user and never blocks the UI.
 *   **Error capture paths:** (a) explicit `trackError` at our own catch sites;
     (b) the webview `error` message; (c) the logger's own forwarding of
@@ -312,7 +311,7 @@ it; a *VS Code session* is the lifetime of one VS Code window.
     schema, and the README "Privacy" section links to `telemetry.json`
     instead of repeating the list.
 *   Anonymous ID: a random UUID generated on first activation and stored in
-    `context.globalState`; used as PostHog's `distinct_id`.
+    the extension's own storage; used as PostHog's `distinct_id`.
 *   Event list (closed; anything else is a bug):
 
 | Event | Properties | Sent when |
@@ -326,8 +325,8 @@ it; a *VS Code session* is the lifetime of one VS Code window.
 
 *   Rate cap: at most 200 events per VS Code session; further events are
     dropped.
-*   Configuration constants (PostHog US host, public project key) live in
-    `src/telemetry-config.js`.
+*   The PostHog US host and public project key are constants in
+    `src/telemetry.js`.
 
 **2. Diff vs HEAD hardening (G3).** Fix F1–F10 from ROADMAP section F, inside
 the existing files. The ones that change structure:
@@ -639,44 +638,61 @@ All paths are relative to `tools/apexlang-view/`. Work happens on
 
 ### Target Files to Create/Modify
 
-#### 1. `src/telemetry-config.js` (Create)
+#### 1. `src/telemetry-schema.js` (Create)
 
-*   **Type / Scope**: Configuration module.
-*   **Proposed Changes**: Exports `POSTHOG_HOST` (`https://us.i.posthog.com` or
-    `https://eu.i.posthog.com`, per the region chosen at sign-up) and
-    `POSTHOG_PROJECT_KEY` (the public `phc_` key). Nothing else.
+*   **Type / Scope**: Data module, no `vscode` import. The only copy of the
+    closed telemetry list (G1, Z18).
+*   **Proposed Changes**: Exports `EVENTS` (event name → allowed property
+    names, each with its allowed values or bucket list, exactly as the event
+    table), `WHERE_CODES` (`refresh.parse`, `refresh.diff`, `git.show`,
+    `git.log`, `appMap.scan`, `webview.render`, `unhandled`), and
+    `COMMON_KEYS` (`extVersion`, `vscodeVersion`, `os`).
 
 #### 2. `src/posthog-sender.js` (Create)
 
 *   **Type / Scope**: Node module, no `vscode` import (unit-testable).
 *   **Proposed Changes**: `createPostHogSender({ host, key, distinctId,
-    fetchImpl, now })` returns `{ sendEventData(name, data),
-    sendErrorData(error, data), flush() }`.
-    *   Allow-list of event names: `activated`, `command`, `viewChanged`,
-        `featureUsed`, `fileParsed`; anything else is dropped.
-    *   `sendErrorData` builds a `$exception` event: error `name`, message cut
-        to 200 characters with anything that looks like a path
-        (`/…`, `X:\…`) replaced by `<path>`, and stack frames kept only if
-        they come from this extension's `src/` or `media/` files, reduced to
-        `file.js:line`.
-    *   Every event gets `distinct_id`, `$process_person_profile: false`,
-        and a timestamp.
+    isEnabled, request, now })` returns `{ sendEventData(name, data),
+    sendErrorData(error, data), flush() }`. `request` defaults to a wrapper
+    around Node's `https.request` (so VS Code's proxy settings apply); tests
+    pass a fake.
+    *   **Off switch:** every `sendEventData` / `sendErrorData` call first
+        calls `isEnabled()` (reads `apexlangView.telemetry.enabled` live) and
+        returns if false.
+    *   **Allowlist:** strip any `publisher.extension/` prefix from `name`;
+        drop the event if the name is not in `EVENTS`; copy only the
+        properties `EVENTS[name]` allows, with allowed values; add
+        `COMMON_KEYS`. Everything else is dropped.
+    *   **Errors:** `sendErrorData` builds a `$exception` event with only the
+        error `name`, a `where` code (must be in `WHERE_CODES`, else
+        `unhandled`), and stack frames from this extension's `src/` or
+        `media/` files reduced to `file.js:line` (webview
+        `vscode-webview://…/graph.js` → `graph.js:line`). No message text. An
+        exception with no own frame is dropped. Each distinct error (name +
+        top own frame) is sent at most once per instance.
+    *   Every event gets `distinct_id`, `$process_person_profile: false`, and
+        a timestamp.
     *   Queue flushes to `POST {host}/batch/` at 20 events, every 30 seconds,
-        and on `flush()`; 5-second timeout; failures dropped.
+        and on `flush()`; one attempt, 5-second timeout, failures dropped,
+        never throws.
     *   Hard cap of 200 events per instance (per VS Code session).
 
 #### 3. `src/telemetry.js` (Create)
 
 *   **Type / Scope**: VS Code-side wrapper.
-*   **Proposed Changes**: `initTelemetry(context)` creates or reads the
-    anonymous UUID in `context.globalState` (key `apexlangView.anonId`),
-    builds the sender, wraps it with
-    `vscode.env.createTelemetryLogger(sender, { ignoreUnhandledErrors: false })`,
-    and registers it in `context.subscriptions` so it is disposed (flushed) on
+*   **Proposed Changes**: Constants `POSTHOG_HOST = 'https://us.i.posthog.com'`
+    (US region, decided) and `POSTHOG_PROJECT_KEY` (public `phc_` key;
+    placeholder until shared, and while it is the placeholder the sender is
+    not created). `initTelemetry(context)` creates or reads the anonymous
+    UUID (`crypto.randomUUID()`) in `context.globalState` (key
+    `apexlangView.anonId`), builds the sender with `isEnabled` reading the
+    setting, wraps it with `vscode.env.createTelemetryLogger(sender, {
+    ignoreUnhandledErrors: false, ignoreBuiltInCommonProperties: true })`,
+    and registers it in `context.subscriptions` so it is flushed on
     deactivate. Exports `track(name, props)` and `trackError(where, err)`;
-    both return immediately when `apexlangView.telemetry.enabled` is false.
-    Also tracks "first use per panel session" for `featureUsed` and
-    `fileParsed` (a `Set` reset when the panel is created).
+    neither checks the setting (the sender does). Also tracks "first use per
+    panel session" for `featureUsed` and `fileParsed` (a `Set` reset when the
+    panel is created).
 
 #### 4. `src/extension.js` (Modify)
 
@@ -685,22 +701,31 @@ All paths are relative to `tools/apexlang-view/`. Work happens on
     *   Telemetry: call `initTelemetry` in `activate` and `track('activated')`;
         `track('command', { name })` in every command handler and toolbar
         message (`openGraph`, `switchFile`, `openAppMap`, `toggleDiff`,
-        `compareWithCommit`, `showLogs`); `logError` also calls `trackError`
-        (except `isKnownBenignNoise`); the webview `error` message calls
-        `trackError('webview', …)`; new webview messages `viewChanged` and
-        `featureUsed` map to `track`; `refresh()` sends `fileParsed` with
+        `compareWithCommit`, `showLogs`). `trackError` is called only at our
+        own catch sites, each with its `where` code (`refresh.parse`,
+        `refresh.diff`, `git.show`, `git.log`, `appMap.scan`). `logError`
+        does **not** call `trackError`, and the process-wide
+        `uncaughtException` / `unhandledRejection` handlers stay
+        output-channel only. The webview `error` message calls
+        `trackError('webview.render', …)` with the posted `name` and stack.
+        New webview messages `viewChanged` and `featureUsed` map to `track`.
+        `refresh()` times `parseApxToGraph` only and sends `fileParsed` with
         size/ms/node buckets on the first parse of each file per panel
         session.
     *   Diff state: replace `diffAgainstHead` (boolean) with `diffRef`
         (`null` | `'HEAD'` | commit hash). `toggleDiffCommand` switches
         between `null` and `'HEAD'`. New `compareWithCommitCommand` shows a
         QuickPick of `repository.log({ path, maxEntries: 50 })` (short hash,
-        date, first message line) and sets `diffRef`. `diffRef` resets to
-        `null` in `switchTo`.
-    *   F6: rename `getContentAtHead` to `getContentAtRef(uri, ref)`; return
-        `{ text }` or `{ reason: 'untracked' | 'noRepo' | 'gitNotReady' }`;
+        date, first message line) and sets `diffRef`. In `switchTo`, a commit
+        hash resets to `'HEAD'`; `'HEAD'` and `null` stay as they are.
+    *   F6: rename `getContentAtHead` to `getContentAtRef(uri, ref)`; wait up
+        to 5 seconds for the git extension's API to be ready; return
+        `{ text }` or `{ reason: 'untracked' | 'noRepo' | 'notInCommit' }`;
         log the reason once per file + ref; send `diffStatus` (ref or reason)
         with the `graph` message.
+    *   Base cache: resolve `'HEAD'` to `repository.state.HEAD.commit`; keep
+        one entry `{ hash, path, text }` (the current file only, same pattern
+        as `pageIndexCache`); reuse it when hash and path match.
     *   F4: module-level `refreshSeq`; each `refresh()` captures its number
         and skips `postMessage` if a newer refresh started.
     *   F10: move the App Map doc comment back above `openAppMapCommand`;
@@ -717,15 +742,18 @@ All paths are relative to `tools/apexlang-view/`. Work happens on
     *   Post `viewChanged` from the View toggle; post `featureUsed` on the
         first search input, `revealLine` click, external-page open, and
         breadcrumb click per panel session.
+    *   The `error` message also posts `name` (error name) alongside the
+        stack.
     *   Diff button label from `diffStatus`: "Diff: Off", "Diff: HEAD",
-        "Diff: a1b2c3d", "Diff: not tracked", "Diff: no git". The "▾" button
-        posts `compareWithCommit`.
+        "Diff: a1b2c3d", "Diff: not tracked", "Diff: no git", "Diff: not in
+        a1b2c3d". The "▾" button posts `compareWithCommit`.
     *   F5: after a `graph` message, re-render the detail panel for
         `selectedNodeId`, or hide it if that node no longer exists.
     *   F7: `renderPropsGrid` also lists keys present only in
         `propChanges[node.id]` (removed properties, shown as old → "(none)").
     *   F10: build `addedSet` / `changedSet` once per `graph` message; row
         rendering uses `Set.has`.
+    *   Remove the webview `log` message (unused).
 
 #### 6. `media/graph.css` (Modify)
 
@@ -749,7 +777,7 @@ All paths are relative to `tools/apexlang-view/`. Work happens on
 
 *   **Type / Scope**: Dead code (Alternative I).
 *   **Proposed Changes**: Delete. `fixtures/orphan-app/` is used only by
-    `test/orphan-detector.test.js`.
+    `test/orphan-detector.test.js` (6 tests removed).
 
 #### 9. `media/demo.mp4` (Delete)
 
@@ -759,100 +787,138 @@ All paths are relative to `tools/apexlang-view/`. Work happens on
 
 #### 10. `test/telemetry.test.js` (Create)
 
-*   **Type / Scope**: Unit tests for `posthog-sender.js` with a fake `fetch`.
-*   **Proposed Changes**: Unknown event names dropped; batch flush at 20 and
-    on `flush()`; cap at 200; payload never contains `\`, `/Users/`,
-    `.apx`, or `C:` after path scrubbing; error stack keeps only extension
-    frames; network failure does not throw.
+*   **Type / Scope**: Unit tests for `posthog-sender.js` and the schema, with
+    a fake `request`.
+*   **Proposed Changes**:
+    *   Unknown event names dropped; `publisher.extension/` prefix stripped.
+    *   Unknown property keys and disallowed values dropped; `common.*` keys
+        never sent.
+    *   `isEnabled() === false` → nothing sent for events or errors.
+    *   Error payload has no `message` key; `where` outside the list becomes
+        `unhandled`; only own frames kept, as `file.js:line`; exception
+        without own frames dropped; the same error sent once.
+    *   Batch flush at 20 and on `flush()`; cap at 200; network failure does
+        not throw.
+    *   `telemetry.json` lists exactly the events and properties in
+        `telemetry-schema.js`.
 
-#### 11. `test/grammar-catalog.js` (Create) and `test/grammar.test.js` (Create)
+#### 11. `test/grammar-keywords.json` (Create) and `test/corpus.test.js` (Modify)
 
-*   **Type / Scope**: Test helper + tests (G4).
-*   **Proposed Changes**: The helper reads `reference/apexlang-26.1.ebnf` and
-    `-26.2.ebnf` and returns component keywords and property keywords. Tests
-    A, B, C as in the Technical Plan. Test B uses the external corpus and
-    skips if it is absent (same rule as `test/corpus.test.js`).
+*   **Type / Scope**: Test data + corpus test (G4).
+*   **Proposed Changes**: The keyword list is generated once by a short
+    one-off script (run by hand, not kept) from `reference/apexlang-26.1.ebnf`
+    and `-26.2.ebnf`: every component keyword, i.e. the first quoted string
+    of each production listed under `<component>`. `corpus.test.js`: raise
+    `minFiles` from 1,200 to 2,228; keep `maxErrors: 0` and
+    `maxSuspicious: 11`; add the G4a check that every produced `typeName` is
+    in `grammar-keywords.json`. Skips when the corpus is absent (existing
+    rule).
 
-#### 12. `test/baseline-render.test.js` (Create)
+#### 12. `test/parser-syntax.test.js` (Create)
 
-*   **Type / Scope**: Regression test for G2.
-*   **Proposed Changes**: For every fixture in `fixtures/` (and up to 50
-    corpus files if present), parse once, then render with the `v0.1.0`
-    `graph.js` (read via `git show v0.1.0:media/graph.js`) and the current
-    `graph.js` in `jsdom`, Diff off, Tree and By Type views, all expanded.
-    Compare row order, text, and class lists; ignore the toolbar. Skips if
-    git or the tag is unavailable.
+*   **Type / Scope**: Parser unit tests (G4b).
+*   **Proposed Changes**: One minimal example each for strings with escapes,
+    `//` and `/* */` comments, arrays, fenced ``` code, and nested groups;
+    asserts the parsed nodes and properties.
 
-#### 13. `test/diff.test.js` (Modify)
+#### 13. `test/css-parity.test.js` (Create)
+
+*   **Type / Scope**: Regression test for F3 (G2's automated part).
+*   **Proposed Changes**: Reads the working-copy `media/graph.css` as text
+    and asserts that the `.tree-row` rule has no `border-left`, and that the
+    `.diff-added` / `.diff-changed` rules set only `box-shadow`. No git, no
+    tag, no `jsdom`.
+
+#### 14. `test/diff.test.js` (Modify)
 
 *   **Type / Scope**: Unit tests.
 *   **Proposed Changes**: Cases for F8 (two same-named siblings, edit the
     first → flagged) and F9 (rename via `name:` → one change, not two).
 
-#### 14. `package.json` (Modify)
+#### 15. `test/webview-ids.test.js` (Create)
+
+*   **Type / Scope**: Static check.
+*   **Proposed Changes**: Every `getElementById('…')` in `media/graph.js`
+    has a matching `id="…"` in `getWebviewHtml` in `src/extension.js` (the
+    check that would have caught the July break).
+
+#### 16. `package.json` (Modify)
 
 *   **Type / Scope**: Manifest.
-*   **Proposed Changes**: `version` 0.2.0; command `apexlangView.compareWithCommit`
-    ("APEXLang View: Compare with Commit…"); `contributes.configuration` with
-    `apexlangView.telemetry.enabled` (boolean, default true, tags `telemetry`,
-    `usesOnlineServices`, description stating what is sent);
-    `devDependencies`: `jsdom` (test only, not packaged).
+*   **Proposed Changes**: `version` 0.2.0; command
+    `apexlangView.compareWithCommit` ("APEXLang View: Compare with
+    Commit…"); `contributes.configuration` with
+    `apexlangView.telemetry.enabled` (boolean, default true, tags
+    `telemetry`, `usesOnlineServices`, description linking to
+    `telemetry.json`). No new dependencies of any kind.
 
-#### 15. `telemetry.json` (Create)
+#### 17. `telemetry.json` (Create)
 
 *   **Type / Scope**: VS Code transparency file.
-*   **Proposed Changes**: Lists each event and property from the Technical
-    Plan's event table, with purpose and classification (usage / error).
+*   **Proposed Changes**: Lists each event and property from
+    `telemetry-schema.js`, with purpose and classification (usage / error).
+    Kept in sync by the test in item 10.
 
-#### 16. `.vscodeignore` (Modify)
+#### 18. `.vscodeignore` (Modify)
 
 *   **Type / Scope**: Packaging.
-*   **Proposed Changes**: Add `media/demo.gif`, `media/demo.mp4`,
-    `reference/**`, `docs/**`, `design_draft.md`, `node_modules/**`.
+*   **Proposed Changes**: Add `media/demo.gif`, `reference/**`, `docs/**`,
+    `node_modules/**`. (`ROADMAP.md`, `test/**`, and `fixtures/**` are
+    already excluded; `demo.mp4` is deleted in item 9.) This matches the
+    Technical Plan §5 list.
 
-#### 17. `README.md` (Modify)
+#### 19. `README.md` (Modify)
 
 *   **Type / Scope**: Marketplace page.
 *   **Proposed Changes**: Add "Compare with Commit…" to Features and the
-    Commands table; add a "Privacy" section (what is sent, what never is,
-    how to turn it off: VS Code telemetry setting or
-    `apexlangView.telemetry.enabled`).
+    Commands table; change "1200+" corpus wording to 2,228 files; add a
+    "Privacy" section (what kind of data is sent, what never is, how to turn
+    it off: VS Code telemetry setting or `apexlangView.telemetry.enabled`,
+    and a link to `telemetry.json` for the full list; known bias: users
+    behind blocking proxies are not counted).
 
-#### 18. `CHANGELOG.md` (Modify)
+#### 20. `CHANGELOG.md` (Modify)
 
 *   **Type / Scope**: Release notes.
 *   **Proposed Changes**: 0.2.0 entries for anonymous telemetry, Compare with
     Commit, the F-fixes visible to users (F5, F6, F7), and removal of the
-    unused orphan-detector code.
+    unused orphan-detector code. Known limits: renamed-file history before
+    the rename; a chosen commit resets to HEAD on file switch; unnamed
+    siblings matched by position; 26.2 unverified unless G4c ran.
 
-#### 19. `TESTING-CHECKLIST.md` (Modify)
+#### 21. `TESTING-CHECKLIST.md` (Modify)
 
 *   **Type / Scope**: Manual test script.
-*   **Proposed Changes**: Add: Diff-off parity with 0.1.0; Compare with
-    Commit; telemetry off (VS Code setting) → output channel shows events
-    dropped; telemetry on → events appear in PostHog Live events.
+*   **Proposed Changes**: Add: Diff-off side-by-side parity with 0.1.0 in a
+    clean profile (rows, order, labels, icons, indentation); Compare with
+    Commit (including "not in a1b2c3d" and file switch); telemetry off (VS
+    Code setting, then our setting) → output channel shows nothing sent;
+    telemetry on → events appear in PostHog Live events.
 
-#### 20. `ROADMAP.md` (Modify) and `docs/DESIGN-v0.2-v0.4.md` (Create)
+#### 22. `ROADMAP.md` (Modify)
 
-*   **Type / Scope**: Tracking and design record.
-*   **Proposed Changes**: Mark items done as they land. The final design is
-    this document, saved to `docs/`.
+*   **Type / Scope**: Tracking.
+*   **Proposed Changes**: Mark items done as they land; record the Timeline
+    check result (Alternative J). The final design is this file,
+    `docs/DESIGN-v0.2-v0.3.md`.
 
 ### Verification Plan
 
 *   **Compilation/Build**: none (plain JavaScript); `node --check` on every
     changed `.js` file.
-*   **Unit Tests**: `npm test` — all existing tests pass (64 minus the removed
-    orphan-detector tests) plus the new telemetry, grammar, diff, and
-    baseline-render tests.
-*   **Static Analysis & Linting**: every `getElementById` in `graph.js` exists
-    in `getWebviewHtml` (the check that would have caught the July break).
+*   **Unit Tests**: `npm test`. Today 64 tests; minus 6 orphan-detector
+    tests = 58 existing, all passing, plus the new telemetry, parser-syntax,
+    css-parity, webview-ids, and diff cases (expected total stated in the
+    commit that adds them).
 *   **Package**: `npx @vscode/vsce package`; size < 100 KB; `vsce ls` shows no
     `demo.*`, `reference/`, `docs/`, `test/`, or `fixtures/`.
 *   **E2E/Integration**: browser harness from 2026-10-17 re-run on the new
     webview; Mohammad's F5 run of `TESTING-CHECKLIST.md`; install the packaged
-    `.vsix` in a clean VS Code profile and confirm events arrive in PostHog
-    Live events, and that none arrive with VS Code telemetry off.
+    `.vsix` in a clean VS Code profile, do the side-by-side check with 0.1.0,
+    and confirm events arrive in PostHog Live events and none arrive with
+    either telemetry setting off.
+*   **Release order**: push `media/demo.gif` to GitHub `main` before the
+    Marketplace upload (G5); turn on PostHog's discard-IP setting first (G1).
 
 --------------------------------------------------------------------------------
 

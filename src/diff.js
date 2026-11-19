@@ -2,10 +2,9 @@
 // session): compares two parsed graphs of the SAME file (e.g. working tree vs
 // HEAD) and classifies nodes as added/removed/changed. Deliberately pure —
 // no git, no filesystem, no vscode — so it's unit-testable under plain
-// `node --test`, matching page-nav.js/app-map.js's pattern. The caller (a
-// future extension.js wiring, not yet built) is responsible for producing
-// the two graphs to compare (e.g. via parseApxToGraph on the working copy
-// and on `git show <ref>:<path>`).
+// `node --test`, matching page-nav.js/app-map.js's pattern. The caller
+// (extension.js refresh()) produces the two graphs to compare: parseApxToGraph
+// on the working copy and on the file's text at the chosen git ref.
 //
 // Nodes are matched across the two graphs by a structural PATH, not by
 // node.id — ids are just positional ("n0", "n1", ...) assigned during a
@@ -17,6 +16,9 @@
 // known, accepted limitation — inserting a new anonymous same-typed sibling
 // before an existing one can misalign matching for siblings after it; named
 // blocks, which cover the vast majority of real nodes, are unaffected).
+// Repeated identifiers among siblings (e.g. several templateOptionGroup
+// blocks with the same name) are matched in order: the first keeps the bare
+// key, later ones get `#2`, `#3`, ... (F8).
 
 function isContainmentEdge(e) {
   return (e.kind || 'contains') === 'contains';
@@ -43,6 +45,19 @@ function nextSiblingIndex(counters, typeName) {
   return n;
 }
 
+// Path segment for one node among its siblings. Named nodes use their
+// identifier; a repeated identifier gets an occurrence suffix (#2, #3, ...)
+// so duplicates are matched in order instead of overwriting each other.
+// Anonymous nodes use their position among same-typed anonymous siblings.
+function siblingKey(node, anonCounters, namedCounters) {
+  if (node.identifier) {
+    const base = `${node.typeName}:${node.identifier}`;
+    const n = nextSiblingIndex(namedCounters, base);
+    return n === 1 ? base : `${base}#${n}`;
+  }
+  return `${node.typeName}#${nextSiblingIndex(anonCounters, node.typeName)}`;
+}
+
 // Returns Map<pathKey, node> for every node in `graph`.
 function buildPathIndex(graph) {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -52,20 +67,18 @@ function buildPathIndex(graph) {
   function visitChildren(parentKey, parentId) {
     const kids = (childrenOf.get(parentId) || []).map((id) => byId.get(id)).filter(Boolean);
     const anonCounters = new Map();
+    const namedCounters = new Map();
     for (const kid of kids) {
-      const kidKey = kid.identifier
-        ? `${parentKey}/${kid.typeName}:${kid.identifier}`
-        : `${parentKey}/${kid.typeName}#${nextSiblingIndex(anonCounters, kid.typeName)}`;
+      const kidKey = `${parentKey}/${siblingKey(kid, anonCounters, namedCounters)}`;
       index.set(kidKey, kid);
       visitChildren(kidKey, kid.id);
     }
   }
 
   const rootCounters = new Map();
+  const rootNamedCounters = new Map();
   for (const root of buildRoots(graph)) {
-    const key = root.identifier
-      ? `${root.typeName}:${root.identifier}`
-      : `${root.typeName}#${nextSiblingIndex(rootCounters, root.typeName)}`;
+    const key = siblingKey(root, rootCounters, rootNamedCounters);
     index.set(key, root);
     visitChildren(key, root.id);
   }
@@ -81,21 +94,20 @@ function propsEqual(a, b) {
   for (const key of keysA) {
     if (propsA[key] !== propsB[key]) return false;
   }
-  return a.label === b.label;
+  return true;
 }
 
-// Returns [{key, oldValue, newValue}] for every prop (plus the pseudo-key
-// "_label") that differs between oldNode and newNode. Only called on a pair
-// already known to differ (propsEqual returned false), so the result is
-// never empty in practice.
+// Returns [{key, oldValue, newValue}] for every prop that differs between
+// oldNode and newNode. Only called on a pair already known to differ
+// (propsEqual returned false), so the result is never empty in practice.
+// The display label is not compared: the parser always derives it from
+// props.name, the identifier, or the type (parser.js), so a label change
+// always shows up as a `name` change or a different path key (F9).
 function computePropChanges(oldNode, newNode) {
   const oldProps = oldNode.props || {};
   const newProps = newNode.props || {};
   const allKeys = new Set([...Object.keys(oldProps), ...Object.keys(newProps)]);
   const changes = [];
-  if (oldNode.label !== newNode.label) {
-    changes.push({ key: '_label', oldValue: oldNode.label, newValue: newNode.label });
-  }
   for (const key of allKeys) {
     if (oldProps[key] !== newProps[key]) {
       changes.push({ key, oldValue: oldProps[key], newValue: newProps[key] });

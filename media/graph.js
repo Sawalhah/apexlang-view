@@ -88,7 +88,10 @@
 
   let currentGraph = null;
   let currentFileName = null;
-  let currentDiff = null; // {added, removed, changed, propChanges, removedInfo}, or null
+  let currentDiff = null; // {added, removed, changed, propChanges}, or null
+  // Built once per graph message so row rendering is a Set lookup (F10).
+  let addedSet = new Set();
+  let changedSet = new Set();
   let selectedNodeId = null;
   let collapsed = new Set(); // node ids (or 'type:<typeName>' group ids)
   let searchQuery = '';
@@ -143,6 +146,8 @@
       currentGraph = msg.graph;
       currentFileName = msg.fileName;
       currentDiff = msg.diff || null;
+      addedSet = new Set(currentDiff ? currentDiff.added : []);
+      changedSet = new Set(currentDiff ? currentDiff.changed : []);
       diffToggleBtn.textContent = msg.diffAgainstHead ? 'Diff: HEAD' : 'Diff: Off';
       fileLabelEl.textContent = msg.fileName;
       nodeCountEl.textContent = currentDiff
@@ -168,6 +173,13 @@
       // whatever pan/zoom the user currently has, same reasoning as the
       // original canvas view — resetting it on every keystroke was jarring.
       render({ fit: isNewFile });
+      // F5: an open detail panel follows the new graph (old → new values
+      // update as you type). A panel the user closed stays closed.
+      if (!detailPanel.classList.contains('hidden') && selectedNodeId !== null) {
+        const selected = currentGraph.nodes.find((n) => n.id === selectedNodeId);
+        if (selected) showDetail(selected);
+        else detailPanel.classList.add('hidden');
+      }
       return;
     }
   });
@@ -717,8 +729,8 @@
     if (node.id === selectedNodeId) classes.push('selected');
     if (searchQuery) classes.push(matchIds.has(node.id) ? 'match' : 'dimmed');
     if (currentDiff) {
-      if (currentDiff.added.includes(node.id)) classes.push('diff-added');
-      else if (currentDiff.changed.includes(node.id)) classes.push('diff-changed');
+      if (addedSet.has(node.id)) classes.push('diff-added');
+      else if (changedSet.has(node.id)) classes.push('diff-changed');
     }
     row.className = classes.join(' ');
     row.setAttribute('role', 'treeitem');
@@ -848,20 +860,12 @@
     const changesForNode = currentDiff && currentDiff.propChanges ? currentDiff.propChanges[node.id] : null;
     const changeByKey = new Map((changesForNode || []).map((c) => [c.key, c]));
 
-    const labelChange = changeByKey.get('_label');
-    if (labelChange) {
-      const row = document.createElement('div');
-      row.className = 'props-row props-row-changed';
-      const label = document.createElement('span');
-      label.className = 'props-label';
-      label.textContent = 'label';
-      row.appendChild(label);
-      row.appendChild(diffValueEl(labelChange.oldValue, labelChange.newValue));
-      detailBody.appendChild(row);
-    }
-
-    const entries = Object.entries(node.props || {});
-    if (entries.length === 0 && !labelChange) {
+    const props = node.props || {};
+    const entries = Object.entries(props);
+    // F7: properties removed since the diff base exist only in the change
+    // list; show them too, as old → (none).
+    const removedChanges = (changesForNode || []).filter((c) => !(c.key in props));
+    if (entries.length === 0 && removedChanges.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'props-empty';
       empty.textContent = 'No scalar properties';
@@ -879,6 +883,16 @@
       row.appendChild(change ? diffValueEl(change.oldValue, value) : plainValueEl(value));
       detailBody.appendChild(row);
     }
+    for (const change of removedChanges) {
+      const row = document.createElement('div');
+      row.className = 'props-row props-row-changed';
+      const label = document.createElement('span');
+      label.className = 'props-label';
+      label.textContent = change.key;
+      row.appendChild(label);
+      row.appendChild(diffValueEl(change.oldValue, undefined));
+      detailBody.appendChild(row);
+    }
   }
 
   function plainValueEl(value) {
@@ -890,7 +904,7 @@
 
   // Renders "oldValue → newValue" with the old value struck through — same
   // restrained pattern as the rest of the detail panel (no new colors
-  // beyond the git-decoration tokens already used for tree-row diff borders).
+  // beyond the git-decoration tokens already used for the tree-row diff bars).
   function diffValueEl(oldValue, newValue) {
     const wrap = document.createElement('span');
     wrap.className = 'props-value props-value-diff';

@@ -174,3 +174,50 @@ test('diffGraphs on two real fixtures with genuinely different content reports a
   // Different pages entirely — expect real churn, not a no-op diff.
   assert.ok(result.added.length + result.removed.length + result.changed.length > 0);
 });
+
+// F8: repeated identifiers among siblings are matched in order, not overwritten.
+function twoNamedChildren(firstLabel) {
+  return {
+    nodes: [
+      { id: 'n0', typeName: 'page', identifier: '1', label: 'Home', props: {} },
+      { id: 'n1', typeName: 'templateOptionGroup', identifier: 'size', label: 'size', props: { label: firstLabel } },
+      { id: 'n2', typeName: 'templateOptionGroup', identifier: 'size', label: 'size', props: { label: 'Second' } },
+    ],
+    edges: [{ from: 'n0', to: 'n1' }, { from: 'n0', to: 'n2' }],
+  };
+}
+
+test('F8: editing the first of two same-named child siblings flags only it', () => {
+  const result = diffGraphs(twoNamedChildren('First'), twoNamedChildren('First EDITED'));
+  assert.deepEqual(result.changed, ['n1']);
+  assert.deepEqual(result.added, []);
+  assert.deepEqual(result.removed, []);
+});
+
+test('F8: editing the first of two same-named root blocks flags only it', () => {
+  const make = (firstValue) => ({
+    nodes: [
+      { id: 'r0', typeName: 'templateOptionGroup', identifier: 'size', label: 'size', props: { label: firstValue } },
+      { id: 'r1', typeName: 'templateOptionGroup', identifier: 'size', label: 'size', props: { label: 'Second' } },
+    ],
+    edges: [],
+  });
+  const result = diffGraphs(make('First'), make('First EDITED'));
+  assert.deepEqual(result.changed, ['r0']);
+  assert.deepEqual(result.added, []);
+  assert.deepEqual(result.removed, []);
+});
+
+// F9: renaming via `name:` is one change (the name prop), not name + _label.
+test('F9: a rename through the name property reports exactly one change', () => {
+  const make = (name) => ({
+    nodes: [
+      { id: 'n0', typeName: 'page', identifier: '1', label: 'Home', props: {} },
+      { id: 'n1', typeName: 'region', identifier: 'r1', label: name, props: { name } },
+    ],
+    edges: [{ from: 'n0', to: 'n1' }],
+  });
+  const result = diffGraphs(make('Orders'), make('Customer Orders'));
+  assert.deepEqual(result.changed, ['n1']);
+  assert.deepEqual(result.propChanges.n1, [{ key: 'name', oldValue: 'Orders', newValue: 'Customer Orders' }]);
+});

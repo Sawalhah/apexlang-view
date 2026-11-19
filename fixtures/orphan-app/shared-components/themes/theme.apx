@@ -1,4 +1,0 @@
-templateComponent breadcrumb-bar (
-    name: Breadcrumb Bar
-    type: region
-)

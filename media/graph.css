@@ -191,7 +191,6 @@ html, body {
   cursor: pointer;
   user-select: none;
   transition: background-color 120ms ease-out;
-  border-left: 3px solid transparent;
 }
 
 .tree-row:hover {
@@ -529,12 +528,14 @@ html, body {
 /* Git-diff indicators — reuse VS Code's own git-decoration theme tokens
    (same colors as the Explorer's added/modified file coloring) so this
    matches the editor's existing visual language instead of inventing new
-   colors. Left border only, never a full-row fill, so it stays readable
-   alongside selection/hover/category-pill styling already on the row. */
+   colors. A 3px inset bar on the left edge, never a full-row fill, so it
+   stays readable alongside selection/hover/category-pill styling already on
+   the row. It is a box-shadow, not a border, so it takes no layout space and
+   rows sit exactly where they did in 0.1.0 when Diff is off (F3). */
 .tree-row.diff-added {
-  border-left: 3px solid var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
+  box-shadow: inset 3px 0 0 var(--vscode-gitDecoration-addedResourceForeground, #81b88b);
 }
 
 .tree-row.diff-changed {
-  border-left: 3px solid var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
+  box-shadow: inset 3px 0 0 var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
 }

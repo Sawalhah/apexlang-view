@@ -2,7 +2,6 @@ const vscode = require('vscode');
 const path = require('path');
 const { parseApxToGraph, assessParseQuality } = require('./parser');
 const { guessAppRoot, buildPageIndex, injectNavStubs } = require('./page-nav');
-const { findOrphans } = require('./orphan-detector');
 const { buildAppMap } = require('./app-map');
 const { diffGraphs } = require('./diff');
 
@@ -258,16 +257,17 @@ async function switchFileCommand(context) {
   }
 }
 
-// Scans the whole app root for .apx files, builds a page-to-page nav map
-// (roadmap #2, app-level scope — see app-map.js), and pushes it into the
-// panel. Opens the panel first (showing whichever file anchors the scan) if
-// it isn't already open, matching openGraphCommand's own bootstrap.
+// Flips Diff vs HEAD on/off and re-renders the current file.
 async function toggleDiffCommand() {
   diffAgainstHead = !diffAgainstHead;
   log(`Diff vs HEAD: ${diffAgainstHead ? 'on' : 'off'}`);
   if (currentUri) await refresh(currentUri);
 }
 
+// Scans the whole app root for .apx files, builds a page-to-page nav map
+// (roadmap #2, app-level scope — see app-map.js), and pushes it into the
+// panel. Opens the panel first (showing whichever file anchors the scan) if
+// it isn't already open, matching openGraphCommand's own bootstrap.
 async function openAppMapCommand(context, uri) {
   const anchorUri = uri || vscode.window.activeTextEditor?.document.uri || currentUri;
   if (!anchorUri) {
@@ -298,63 +298,6 @@ async function openAppMapCommand(context, uri) {
     panel.reveal(panel.viewColumn, true);
   }
   panel.webview.postMessage({ type: 'appMap', appMap });
-}
-
-// NOT CURRENTLY WIRED TO A COMMAND (roadmap #5, deliberately shelved
-// 2026-07-23) — real-corpus validation showed the @identifier-only
-// detection this relies on is unreliable: most shared-component types
-// (LOVs, files, authentication schemes, etc.) are actually referenced via a
-// plain NAME string elsewhere, not the bare `@identifier` syntax this
-// checks. Confirmed against 180 real apps: restDataSource 1/26 referenced
-// this way, LOV 1/105, file 0/383. Shipping "Find Unused Components" on
-// this alone would flag mostly-used real components as orphaned. Kept
-// here, tested, and correct at what it actually does — re-wire only after
-// adding real by-name reference matching per type, which is a separate,
-// larger effort, not a quick follow-up.
-async function findUnusedComponentsCommand(context) {
-  const anchorUri = vscode.window.activeTextEditor?.document.uri || currentUri;
-  if (!anchorUri) {
-    vscode.window.showWarningMessage('APEXLang View: open (or view the graph for) an .apx file first, so I know which app to scan.');
-    return;
-  }
-
-  const appRoot = guessAppRoot(anchorUri.fsPath);
-  log(`Scanning for unused shared components under: ${appRoot}`);
-  const pattern = new vscode.RelativePattern(appRoot, '**/*.apx');
-  const uris = await vscode.workspace.findFiles(pattern, null, 5000);
-  const files = [];
-  for (const uri of uris) {
-    try {
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      files.push({ fsPath: uri.fsPath, text: Buffer.from(bytes).toString('utf8') });
-    } catch (err) {
-      logError(`findUnusedComponents: could not read ${uri.fsPath}`, err);
-    }
-  }
-
-  const orphans = findOrphans(files);
-  log(`findUnusedComponents: scanned ${files.length} files, found ${orphans.length} unused shared component(s)`);
-
-  if (orphans.length === 0) {
-    vscode.window.showInformationMessage('APEXLang View: no unused shared components found.');
-    return;
-  }
-
-  const items = orphans
-    .map((o) => ({
-      label: `${o.identifier} (${o.typeName})`,
-      description: vscode.workspace.asRelativePath(o.fsPath),
-      orphan: o,
-    }))
-    .sort((a, b) => a.description.localeCompare(b.description));
-
-  const picked = await vscode.window.showQuickPick(items, {
-    placeHolder: `${orphans.length} unused shared component(s) found — select one to jump to its declaration`,
-    matchOnDescription: true,
-  });
-  if (!picked) return;
-
-  await revealLineInEditor(vscode.Uri.file(picked.orphan.fsPath), picked.orphan.line);
 }
 
 async function createPanelAndShow(context, targetUri) {
@@ -487,7 +430,9 @@ async function refresh(uri) {
       // all "nothing to diff against", not a failure worth surfacing.
       if (headText !== null) {
         const headGraph = parseApxToGraph(headText);
-        diff = diffGraphs(headGraph, graph);
+        // removedInfo is not used by the webview (F10); keep the message small.
+        const { removedInfo, ...forWebview } = diffGraphs(headGraph, graph);
+        diff = forWebview;
       }
     } catch (err) {
       logError(`refresh(${fileName}): diff vs HEAD failed`, err);

@@ -1,7 +1,7 @@
 # APEXLang View v0.2.0 – v0.3.0
 
 *   **Author:** sawalhah (Mohammad Sawalhah)
-*   **Status:** Approved by author; /egm:egm-review in progress (Stage 7 fixes applied)
+*   **Status:** Approved by author; /egm:egm-review complete 2026-11-20 (Stages 5-9 resolved; see docs/review/consolidated_review_report.md). Ready to build.
 *   **Date:** 2026-11-19
 
 --------------------------------------------------------------------------------
@@ -316,7 +316,7 @@ it; a *VS Code session* is the lifetime of one VS Code window.
 
 | Event | Properties | Sent when |
 |---|---|---|
-| `activated` | `extVersion`, `vscodeVersion` (`vscode.version`), `os` (`process.platform`) | extension activates |
+| `activated` | none of its own. Every event (this one included) carries the common properties `extVersion`, `vscodeVersion` (`vscode.version`), and `os` (`process.platform`), added by the sender | extension activates |
 | `command` | `name`: openGraph, switchFile, openAppMap, toggleDiff, compareWithCommit, showLogs | a command runs (palette, button, or toolbar) |
 | `viewChanged` | `view`: tree, byType, graph | the View toggle is clicked |
 | `featureUsed` | `name`: search, jumpToSource, openExternalPage, breadcrumb | first use of that feature per panel session |
@@ -333,13 +333,15 @@ the existing files. The ones that change structure:
 
 *   F4 (stale refresh): `refresh()` takes a sequence number at its start and
     posts only if it is still the latest.
-*   F5 (detail panel not updating): the `graph` message handler re-renders the
-    open detail panel for the selected node, or closes it if the node is gone.
+*   F5 (detail panel not updating): when the detail panel is open, the
+    `graph` message handler re-renders it for the selected node, or closes it
+    if the node is gone. A panel the user closed stays closed.
 *   F6 (diff state unclear): `getContentAtRef` returns a reason (`untracked`,
     `noRepo`, `notInCommit`) instead of `null`; the extension sends
-    `diffStatus` with the `graph` message; the reason is logged once per file.
-    If git is still loading, the extension waits for it (up to 5 seconds)
-    before reading. User-visible states are only "Diff: not tracked",
+    `diffStatus` with the `graph` message; the reason is logged once per file
+    and ref. If VS Code's git extension is still starting, the extension
+    waits for it once (up to 5 seconds) before the first read; it never waits
+    for a repository to appear. User-visible states are only "Diff: not tracked",
     "Diff: no git", and "Diff: not in a1b2c3d".
 *   F3 (3px shift): the diff row marker becomes an inset box-shadow, which
     takes no layout space, so rows render at their 0.1.0 position when Diff is
@@ -361,9 +363,9 @@ the existing files. The ones that change structure:
 *   **Base cache:** on each refresh, `HEAD` is resolved to a hash from
     `repository.state.HEAD.commit` (in memory, no git call). The base file
     text is cached under (commit hash, path); an entry keyed by a hash never
-    goes stale, so there is no invalidation logic. Only the current file's
-    entry is kept (same pattern as `pageIndexCache` in `src/extension.js`), so
-    typing does no git work after the first read. F4's sequence guard stays
+    goes stale, so there is no invalidation logic. Only one entry is kept
+    (the current file), replaced on a miss, so typing does no git work after
+    the first read. F4's sequence guard stays
     as a backup.
 *   **Renames:** history does not follow renames (VS Code's git API `log` and
     `show` use the current path). Commits from before a rename are not listed,
@@ -634,144 +636,272 @@ starting proposal and can be changed before the decision.
 ## Detailed Implementation Plan (0.2.0)
 
 All paths are relative to `tools/apexlang-view/`. Work happens on
-`feature/git-diff`.
+`feature/git-diff`. Line numbers refer to the code at commit `cdcd1d8`.
+
+### Build Phases
+
+Each phase ends with `npm test` green and a commit. Items are listed below
+by file; this is the order to build them in.
+
+1.  **Clean-up and F-fixes:** items 8, 9 (deletions); 7 and 14 (F8, F9 in
+    `diff.js` with tests); 6 (F3 CSS) and 13 (CSS test); the F5, F7, F10
+    parts of item 5; the F10 and orphan parts of item 4; item 15
+    (webview-ids test).
+2.  **Diff ref and Compare with Commit:** the diff-state, F4, F6, base-cache,
+    and Compare-with-Commit parts of items 4 and 5 together (they share the
+    `graph` message shape), plus the new command in item 16.
+3.  **Telemetry:** items 1, 2, 3, 17, 10, then the telemetry parts of items 4
+    and 5, and the setting in item 16.
+4.  **Grammar tests:** items 11 and 12.
+5.  **Docs and packaging:** items 18, 19, 20, 21, 22, version bump in item 16,
+    then `vsce package` and the Verification Plan.
 
 ### Target Files to Create/Modify
 
 #### 1. `src/telemetry-schema.js` (Create)
 
 *   **Type / Scope**: Data module, no `vscode` import. The only copy of the
-    closed telemetry list (G1, Z18).
-*   **Proposed Changes**: Exports `EVENTS` (event name → allowed property
-    names, each with its allowed values or bucket list, exactly as the event
-    table), `WHERE_CODES` (`refresh.parse`, `refresh.diff`, `git.show`,
-    `git.log`, `appMap.scan`, `webview.render`, `unhandled`), and
-    `COMMON_KEYS` (`extVersion`, `vscodeVersion`, `os`).
+    closed telemetry list (Technical Plan §1, "Allowlist, defined once").
+*   **Proposed Changes**: Exports:
+    *   `EVENTS`: event name → allowed property names, each with its allowed
+        values or bucket list, exactly as the event table.
+    *   `WHERE_CODES`: `refresh.parse`, `refresh.diff`, `git.show`,
+        `git.log`, `appMap.scan`, `webview.render`, `unhandled`.
+    *   `COMMON_KEYS`: `extVersion`, `vscodeVersion`, `os`. These are added
+        to every event by the sender.
+    *   `FREE_TEXT`: the check for values that have no fixed list
+        (`extVersion`, `vscodeVersion`, `os`, error `name`): a string of at
+        most 64 characters matching `^[\w.\-]+$`; anything else is replaced by
+        `other`.
 
 #### 2. `src/posthog-sender.js` (Create)
 
 *   **Type / Scope**: Node module, no `vscode` import (unit-testable).
 *   **Proposed Changes**: `createPostHogSender({ host, key, distinctId,
-    isEnabled, request, now })` returns `{ sendEventData(name, data),
-    sendErrorData(error, data), flush() }`. `request` defaults to a wrapper
-    around Node's `https.request` (so VS Code's proxy settings apply); tests
-    pass a fake.
+    common, ownRoot, isEnabled, log, request, now })` returns
+    `{ sendEventData(name, data), sendErrorData(error, data), flush() }`.
+    *   Inputs: `common` = `{ extVersion, vscodeVersion, os }`; `ownRoot` =
+        the extension's install path (`context.extensionPath`), used to tell
+        our stack frames apart; `log(line)` writes to the output channel;
+        `request` defaults to a wrapper around Node's `https.request` (so VS
+        Code's proxy settings apply), and tests pass a fake.
     *   **Off switch:** every `sendEventData` / `sendErrorData` call first
         calls `isEnabled()` (reads `apexlangView.telemetry.enabled` live) and
         returns if false.
     *   **Allowlist:** strip any `publisher.extension/` prefix from `name`;
         drop the event if the name is not in `EVENTS`; copy only the
-        properties `EVENTS[name]` allows, with allowed values; add
-        `COMMON_KEYS`. Everything else is dropped.
+        properties `EVENTS[name]` allows, with allowed values; add `common`
+        (checked with `FREE_TEXT`). Everything else is dropped.
     *   **Errors:** `sendErrorData` builds a `$exception` event with only the
         error `name`, a `where` code (must be in `WHERE_CODES`, else
-        `unhandled`), and stack frames from this extension's `src/` or
-        `media/` files reduced to `file.js:line` (webview
-        `vscode-webview://…/graph.js` → `graph.js:line`). No message text. An
-        exception with no own frame is dropped. Each distinct error (name +
-        top own frame) is sent at most once per instance.
-    *   Every event gets `distinct_id`, `$process_person_profile: false`, and
-        a timestamp.
-    *   Queue flushes to `POST {host}/batch/` at 20 events, every 30 seconds,
-        and on `flush()`; one attempt, 5-second timeout, failures dropped,
-        never throws.
-    *   Hard cap of 200 events per instance (per VS Code session).
+        `unhandled`), and stack frames whose path is under `ownRoot` (or a
+        webview `vscode-webview://…/graph.js` URL), reduced to file basename
+        and line. No message text. An exception with no own frame is
+        dropped. Each distinct error (name + top own frame) is sent at most
+        once per VS Code session (one sender instance).
+    *   **Wire format** (`POST {host}/batch/`, JSON). To be checked against
+        PostHog's capture API docs during phase 3; field names below are the
+        documented ones as of 2026-11:
+
+        ```json
+        { "api_key": "phc_…",
+          "batch": [
+            { "event": "command",
+              "timestamp": "2026-11-20T10:00:00.000Z",
+              "properties": { "distinct_id": "<uuid>",
+                "$process_person_profile": false,
+                "extVersion": "0.2.0", "vscodeVersion": "1.96.0", "os": "win32",
+                "name": "toggleDiff" } },
+            { "event": "$exception",
+              "timestamp": "2026-11-20T10:00:01.000Z",
+              "properties": { "distinct_id": "<uuid>",
+                "$process_person_profile": false,
+                "extVersion": "0.2.0", "vscodeVersion": "1.96.0", "os": "win32",
+                "where": "refresh.parse",
+                "$exception_list": [ { "type": "TypeError", "value": "TypeError",
+                  "stacktrace": { "type": "raw", "frames": [
+                    { "filename": "parser.js", "lineno": 212, "in_app": true } ] } } ] } } ] }
+        ```
+
+        `value` is the error name, never the message.
+    *   Queue flushes at 20 events, every 30 seconds (timer `unref()`'d), and
+        on `flush()`; one attempt, 5-second timeout, failures dropped, never
+        throws. `flush()` clears the timer and returns a promise.
+    *   Hard cap of 200 events per VS Code session (one sender instance).
+    *   **Logging:** one output-channel line per batch sent (`telemetry:
+        sent N events`), and one line the first time an event is dropped for
+        each cause (`dropped: setting off` / `dropped: cap reached` /
+        `dropped: not allowed`).
 
 #### 3. `src/telemetry.js` (Create)
 
 *   **Type / Scope**: VS Code-side wrapper.
-*   **Proposed Changes**: Constants `POSTHOG_HOST = 'https://us.i.posthog.com'`
-    (US region, decided) and `POSTHOG_PROJECT_KEY` (public `phc_` key;
-    placeholder until shared, and while it is the placeholder the sender is
-    not created). `initTelemetry(context)` creates or reads the anonymous
-    UUID (`crypto.randomUUID()`) in `context.globalState` (key
-    `apexlangView.anonId`), builds the sender with `isEnabled` reading the
-    setting, wraps it with `vscode.env.createTelemetryLogger(sender, {
-    ignoreUnhandledErrors: false, ignoreBuiltInCommonProperties: true })`,
-    and registers it in `context.subscriptions` so it is flushed on
-    deactivate. Exports `track(name, props)` and `trackError(where, err)`;
-    neither checks the setting (the sender does). Also tracks "first use per
-    panel session" for `featureUsed` and `fileParsed` (a `Set` reset when the
-    panel is created).
+*   **Proposed Changes**:
+    *   Constants `POSTHOG_HOST = 'https://us.i.posthog.com'` (US region,
+        decided) and `POSTHOG_PROJECT_KEY` (public `phc_` key; a placeholder
+        until shared).
+    *   `initTelemetry(context, log)`: if the key is still the placeholder,
+        create nothing. Otherwise create or read the anonymous UUID
+        (`crypto.randomUUID()`) in `context.globalState` (key
+        `apexlangView.anonId`); build the sender with `common`,
+        `ownRoot = context.extensionPath`, `isEnabled` reading the setting,
+        and `log`; wrap it with `vscode.env.createTelemetryLogger(sender, {
+        ignoreUnhandledErrors: false, ignoreBuiltInCommonProperties: true })`;
+        register the logger in `context.subscriptions`.
+    *   `track(name, props)` and `trackError(where, err)`: no-op when no
+        logger exists; neither checks the setting (the sender does).
+    *   **First use per panel session:** `telemetry.js` is the only place
+        that removes repeats for `featureUsed` (per name) and `fileParsed`
+        (per file path, kept in memory only). Callers call `track` on every
+        use. `resetPanelSession()` clears the sets.
+    *   `flushTelemetry()` returns the sender's flush promise (best effort
+        within VS Code's deactivate window).
 
 #### 4. `src/extension.js` (Modify)
 
 *   **Type / Scope**: Extension entry point.
 *   **Proposed Changes**:
-    *   Telemetry: call `initTelemetry` in `activate` and `track('activated')`;
-        `track('command', { name })` in every command handler and toolbar
-        message (`openGraph`, `switchFile`, `openAppMap`, `toggleDiff`,
-        `compareWithCommit`, `showLogs`). `trackError` is called only at our
-        own catch sites, each with its `where` code (`refresh.parse`,
-        `refresh.diff`, `git.show`, `git.log`, `appMap.scan`). `logError`
+    *   **Telemetry wiring:** call `initTelemetry(context, logLine)` in
+        `activate`, then `track('activated')`. `deactivate` returns
+        `flushTelemetry()`. `createPanelAndShow` calls `resetPanelSession()`.
+    *   **Commands:** `track('command', { name })` is called once, at the top
+        of each `xxxCommand()` function (`openGraph`, `switchFile`,
+        `openAppMap`, `toggleDiff`, `compareWithCommit`, `showLogs`); both
+        the registered command and the webview message call that function,
+        so each user action counts once.
+    *   **Errors:** `trackError` only at our own catch sites, each with its
+        `where` code (`refresh.parse`, `refresh.diff`, `git.show` for
+        unexpected git failures only, `git.log`, `appMap.scan`). `logError`
         does **not** call `trackError`, and the process-wide
-        `uncaughtException` / `unhandledRejection` handlers stay
-        output-channel only. The webview `error` message calls
-        `trackError('webview.render', …)` with the posted `name` and stack.
-        New webview messages `viewChanged` and `featureUsed` map to `track`.
-        `refresh()` times `parseApxToGraph` only and sends `fileParsed` with
-        size/ms/node buckets on the first parse of each file per panel
+        `uncaughtException` / `unhandledRejection` handlers
+        (lines 124-131) stay output-channel only. The webview `error` message
+        calls `trackError('webview.render', …)` with the posted `name` and
+        stack.
+    *   **New webview messages** in `onDidReceiveMessage` (lines 377-410):
+        `{type:'viewChanged', view}` → `track('viewChanged', { view })`;
+        `{type:'featureUsed', name}` → `track('featureUsed', { name })`;
+        `{type:'compareWithCommit'}` → `compareWithCommitCommand()`. Remove
+        the unused `log` branch (lines 407-409).
+    *   **`fileParsed`:** `refresh()` times `parseApxToGraph` only and calls
+        `track('fileParsed', …)` with size/ms/node buckets and `suspicious`
+        on every parse; `telemetry.js` keeps the first per file per panel
         session.
-    *   Diff state: replace `diffAgainstHead` (boolean) with `diffRef`
-        (`null` | `'HEAD'` | commit hash). `toggleDiffCommand` switches
-        between `null` and `'HEAD'`. New `compareWithCommitCommand` shows a
-        QuickPick of `repository.log({ path, maxEntries: 50 })` (short hash,
-        date, first message line) and sets `diffRef`. In `switchTo`, a commit
-        hash resets to `'HEAD'`; `'HEAD'` and `null` stay as they are.
-    *   F6: rename `getContentAtHead` to `getContentAtRef(uri, ref)`; wait up
-        to 5 seconds for the git extension's API to be ready; return
-        `{ text }` or `{ reason: 'untracked' | 'noRepo' | 'notInCommit' }`;
-        log the reason once per file + ref; send `diffStatus` (ref or reason)
-        with the `graph` message.
-    *   Base cache: resolve `'HEAD'` to `repository.state.HEAD.commit`; keep
-        one entry `{ hash, path, text }` (the current file only, same pattern
-        as `pageIndexCache`); reuse it when hash and path match.
-    *   F4: module-level `refreshSeq`; each `refresh()` captures its number
+    *   **Diff state:** replace `diffAgainstHead` (line 51) with `diffRef`
+        (`null` | `'HEAD'` | full commit hash). `toggleDiffCommand`: any
+        non-null value → `null`; `null` → `'HEAD'`. In `switchTo`, a commit
+        hash resets to `'HEAD'`; `'HEAD'` and `null` stay. `diffRef` survives
+        panel close (as `diffAgainstHead` does today). Log text at lines 267,
+        493, 499 uses the ref ("Diff vs HEAD" / "Diff vs a1b2c3d").
+    *   **`compareWithCommitCommand`:** if there is no current file, show the
+        same warning as `openGraph`. Get the repository; if none, show an
+        info message "Not in a git repository". Run `repository.log({ path,
+        maxEntries: 50 })`; on throw, `trackError('git.log', err)` and an
+        info message; if 0 commits, info "No commits for this file". Show a
+        QuickPick: 7-character hash, date as `YYYY-MM-DD`, first message
+        line. Cancel leaves `diffRef` unchanged. On pick, set `diffRef` to
+        the full hash and `await refresh(currentUri)`.
+    *   **F6 — `getContentAtRef(uri, ref)`** (renamed from
+        `getContentAtHead`, line 65; extends `getGitApi()`, lines 55-60):
+        *   Git API wait: the first time, if the API `state` is not
+            `'initialized'`, wait for `onDidChangeState` up to 5 seconds.
+            Only once per VS Code session; never wait for a repository.
+        *   No API or no repository for the file → `{ reason: 'noRepo' }`.
+        *   Resolve `'HEAD'` to `repository.state.HEAD?.commit`; if there is
+            no HEAD commit (empty repo) → `{ reason: 'notInCommit' }`.
+        *   Base cache: one variable `{ hash, path, text }`; if hash and path
+            match, return its text; otherwise call
+            `repository.show(hash, path)` with the resolved hash and replace
+            the variable.
+        *   `show` fails and the ref was `'HEAD'` → `{ reason: 'untracked' }`
+            (covers new and staged-but-uncommitted files); `show` fails with
+            a chosen hash → `{ reason: 'notInCommit' }`. Any other exception
+            (not a git "path does not exist" error) → `trackError('git.show')`
+            and `{ reason: 'noRepo' }`.
+        *   Log the reason once per file and ref.
+    *   **`graph` message** (line 503): remove `diffAgainstHead`; add
+        `diffStatus: { ref: null | 'HEAD' | fullHash, reason?: 'untracked' |
+        'noRepo' | 'notInCommit' }`.
+    *   **F4:** module-level `refreshSeq`; each `refresh()` captures its number
         and skips `postMessage` if a newer refresh started.
-    *   F10: move the App Map doc comment back above `openAppMapCommand`;
-        strip `removedInfo` from the diff before `postMessage`.
-    *   Remove the `orphan-detector` import and `findUnusedComponentsCommand`.
+    *   **F10:** move the App Map doc comment (lines 261-264) back above
+        `openAppMapCommand`; strip `removedInfo` from the diff before
+        `postMessage`.
+    *   Remove the `orphan-detector` import and `findUnusedComponentsCommand`
+        (line 314).
     *   Register the `compareWithCommit` command.
-    *   The webview HTML (`getWebviewHtml`) adds a "▾" button next to Diff
-        (`id="diff-pick"`, title "Compare with commit…").
+    *   `getWebviewHtml` adds a "▾" button next to Diff (`id="diff-pick"`,
+        title "Compare with commit…").
 
 #### 5. `media/graph.js` (Modify)
 
 *   **Type / Scope**: Webview script.
 *   **Proposed Changes**:
-    *   Post `viewChanged` from the View toggle; post `featureUsed` on the
-        first search input, `revealLine` click, external-page open, and
-        breadcrumb click per panel session.
-    *   The `error` message also posts `name` (error name) alongside the
-        stack.
-    *   Diff button label from `diffStatus`: "Diff: Off", "Diff: HEAD",
-        "Diff: a1b2c3d", "Diff: not tracked", "Diff: no git", "Diff: not in
-        a1b2c3d". The "▾" button posts `compareWithCommit`.
-    *   F5: after a `graph` message, re-render the detail panel for
-        `selectedNodeId`, or hide it if that node no longer exists.
-    *   F7: `renderPropsGrid` also lists keys present only in
-        `propChanges[node.id]` (removed properties, shown as old → "(none)").
-    *   F10: build `addedSet` / `changedSet` once per `graph` message; row
-        rendering uses `Set.has`.
-    *   Remove the webview `log` message (unused).
+    *   **Telemetry messages:** the View toggle posts
+        `{type:'viewChanged', view}`. `featureUsed` is posted at each call
+        site, every time (the extension removes repeats):
+        *   search box input → `search`;
+        *   tree row click or arrow-key move that calls `selectAndReveal`
+            with `jumpToSource` → `jumpToSource`;
+        *   breadcrumb click (line 935) → `breadcrumb`;
+        *   external-page open → `openExternalPage`.
+
+        A breadcrumb click counts only as `breadcrumb`; reference clicks
+        (line 967) count as `jumpToSource`.
+    *   The `error` message (lines 7-20) also posts `name`.
+    *   **Diff label** from `diffStatus` (replacing `msg.diffAgainstHead`,
+        line 146):
+        *   `ref: null` → "Diff: Off";
+        *   `ref: 'HEAD'` and no reason → "Diff: HEAD";
+        *   a hash and no reason → "Diff: a1b2c3d" (first 7 characters);
+        *   reason `untracked` → "Diff: not tracked";
+        *   reason `noRepo` → "Diff: no git";
+        *   reason `notInCommit` → "Diff: not in a1b2c3d", or "Diff: not in
+            HEAD" when the ref is `'HEAD'`.
+
+        The node-count text (line 149) uses the same ref label instead of
+        the hard-coded "vs HEAD". The "▾" button posts
+        `{type:'compareWithCommit'}`.
+    *   **F5:** after a `graph` message, if the detail panel is not hidden,
+        re-render it for `selectedNodeId`, or hide it if that node no longer
+        exists. A closed panel stays closed.
+    *   **F7:** `renderPropsGrid` (line 846) also lists keys present only in
+        `propChanges[node.id]` (removed properties); reuse `diffValueEl`,
+        which already renders `undefined` as "(none)".
+    *   **F9 follow-up:** remove the now-dead `labelChange` branch in
+        `renderPropsGrid` (lines 851-864).
+    *   **F10:** build `addedSet` / `changedSet` once per `graph` message; row
+        rendering uses `Set.has` instead of `.includes` (lines 720-721).
+    *   Update the stale "tree-row diff borders" comment (lines 891-893).
 
 #### 6. `media/graph.css` (Modify)
 
 *   **Type / Scope**: Webview styles.
-*   **Proposed Changes**: F3 — remove `border-left: 3px solid transparent`
-    from `.tree-row`; `.tree-row.diff-added` / `.diff-changed` use
-    `box-shadow: inset 3px 0 0 <git decoration token>` instead of a border.
-    Style for `#diff-pick` (same as other toolbar buttons, narrow).
+*   **Proposed Changes**: F3: remove `border-left: 3px solid transparent`
+    from `.tree-row` (line 194). `.tree-row.diff-added` uses
+    `box-shadow: inset 3px 0 0
+    var(--vscode-gitDecoration-addedResourceForeground, #81b88b)` and
+    `.tree-row.diff-changed` uses the same with
+    `--vscode-gitDecoration-modifiedResourceForeground, #e2c08d` (lines
+    534-540). Update the "Left border only" comment (lines 529-533).
+    `#diff-pick` already gets toolbar styling from `#toolbar button`
+    (lines 28-40); add only a narrow width/padding override.
 
 #### 7. `src/diff.js` (Modify)
 
 *   **Type / Scope**: Pure diff module.
-*   **Proposed Changes**: F8 — in `buildPathIndex`, when a
-    `typeName:identifier` key already exists among siblings, append `#n` (nth
-    occurrence) so duplicates are matched in order instead of overwritten.
-    F9 — `computePropChanges` skips `_label` when the label is derived from
-    `props.name` or the identifier. Remove the stale "extension.js wiring not
-    yet built" header line.
+*   **Proposed Changes**:
+    *   **F8:** in `buildPathIndex`, both the child loop (lines 56-59) and
+        the root loop (lines 66-69) stop overwriting duplicates. The first
+        occurrence of a `typeName:identifier` key keeps the bare key; the
+        2nd and later get `#2`, `#3`, … Reuse `nextSiblingIndex`
+        (lines 40-44) for the counter.
+    *   **F9:** the label is always derived from `props.name`, the
+        identifier, or the type (`parser.js:256`), so a label change always
+        comes with a `name` or key change. Drop `_label` from
+        `computePropChanges` (lines 96-98) and from the comparison in
+        `propsEqual` (line 84).
+    *   Rewrite the stale sentence at lines 5-8 ("The caller (a future
+        extension.js wiring, not yet built) …").
 
 #### 8. `src/orphan-detector.js`, `test/orphan-detector.test.js`, `fixtures/orphan-app/` (Delete)
 
@@ -788,15 +918,18 @@ All paths are relative to `tools/apexlang-view/`. Work happens on
 #### 10. `test/telemetry.test.js` (Create)
 
 *   **Type / Scope**: Unit tests for `posthog-sender.js` and the schema, with
-    a fake `request`.
+    a fake `request` and fake `log`.
 *   **Proposed Changes**:
     *   Unknown event names dropped; `publisher.extension/` prefix stripped.
     *   Unknown property keys and disallowed values dropped; `common.*` keys
-        never sent.
-    *   `isEnabled() === false` → nothing sent for events or errors.
-    *   Error payload has no `message` key; `where` outside the list becomes
-        `unhandled`; only own frames kept, as `file.js:line`; exception
-        without own frames dropped; the same error sent once.
+        never sent; free-text values outside `FREE_TEXT` become `other`.
+    *   `isEnabled() === false` → nothing sent for events or errors, and the
+        log shows "dropped: setting off".
+    *   Error payload: no message text anywhere; `value` equals the name;
+        `where` outside the list becomes `unhandled`; only frames under
+        `ownRoot` kept, as basename + line; exception without own frames
+        dropped; the same error sent once.
+    *   Payload shape matches the wire-format example (item 2).
     *   Batch flush at 20 and on `flush()`; cap at 200; network failure does
         not throw.
     *   `telemetry.json` lists exactly the events and properties in
@@ -804,15 +937,20 @@ All paths are relative to `tools/apexlang-view/`. Work happens on
 
 #### 11. `test/grammar-keywords.json` (Create) and `test/corpus.test.js` (Modify)
 
-*   **Type / Scope**: Test data + corpus test (G4).
-*   **Proposed Changes**: The keyword list is generated once by a short
-    one-off script (run by hand, not kept) from `reference/apexlang-26.1.ebnf`
-    and `-26.2.ebnf`: every component keyword, i.e. the first quoted string
-    of each production listed under `<component>`. `corpus.test.js`: raise
-    `minFiles` from 1,200 to 2,228; keep `maxErrors: 0` and
-    `maxSuspicious: 11`; add the G4a check that every produced `typeName` is
-    in `grammar-keywords.json`. Skips when the corpus is absent (existing
-    rule).
+*   **Type / Scope**: Test data + corpus test (G4a).
+*   **Proposed Changes**:
+    *   The keyword list is generated once by a short one-off script (run by
+        hand, not kept) from `reference/apexlang-26.1.ebnf` and
+        `-26.2.ebnf`: every component keyword, i.e. the first quoted string
+        of each production listed under `<component>`.
+    *   `corpus.test.js`: raise `minFiles` from 1,200 to 2,228; keep
+        `maxErrors: 0` and `maxSuspicious: 11`; replace the local copy of the
+        quality check (lines 39-73) with the exported `assessParseQuality`
+        from `src/parser.js`.
+    *   G4a check: for every file **not** flagged suspicious, every produced
+        `typeName` is in `grammar-keywords.json` (suspicious files have
+        garbage type names by definition and are covered by the baseline).
+    *   Skips when the corpus is absent (existing rule).
 
 #### 12. `test/parser-syntax.test.js` (Create)
 
@@ -826,62 +964,62 @@ All paths are relative to `tools/apexlang-view/`. Work happens on
 *   **Type / Scope**: Regression test for F3 (G2's automated part).
 *   **Proposed Changes**: Reads the working-copy `media/graph.css` as text
     and asserts that the `.tree-row` rule has no `border-left`, and that the
-    `.diff-added` / `.diff-changed` rules set only `box-shadow`. No git, no
-    tag, no `jsdom`.
+    `.tree-row.diff-added` / `.tree-row.diff-changed` rules set only
+    `box-shadow`. No git, no tag, no `jsdom`.
 
 #### 14. `test/diff.test.js` (Modify)
 
 *   **Type / Scope**: Unit tests.
-*   **Proposed Changes**: Cases for F8 (two same-named siblings, edit the
-    first → flagged) and F9 (rename via `name:` → one change, not two).
+*   **Proposed Changes**: Cases for F8 (two same-named child siblings, edit
+    the first → only it flagged; same for two same-named root blocks) and
+    F9 (rename via `name:` → one change, not two).
 
 #### 15. `test/webview-ids.test.js` (Create)
 
 *   **Type / Scope**: Static check.
 *   **Proposed Changes**: Every `getElementById('…')` in `media/graph.js`
     has a matching `id="…"` in `getWebviewHtml` in `src/extension.js` (the
-    check that would have caught the July break).
+    check that would have caught the July break; all ids match today).
 
 #### 16. `package.json` (Modify)
 
 *   **Type / Scope**: Manifest.
-*   **Proposed Changes**: `version` 0.2.0; command
+*   **Proposed Changes**: `version` 0.2.0 (phase 5); command
     `apexlangView.compareWithCommit` ("APEXLang View: Compare with
-    Commit…"); `contributes.configuration` with
+    Commit…", phase 2); `contributes.configuration` with
     `apexlangView.telemetry.enabled` (boolean, default true, tags
     `telemetry`, `usesOnlineServices`, description linking to
-    `telemetry.json`). No new dependencies of any kind.
+    `telemetry.json`; phase 3). No new dependencies of any kind.
 
 #### 17. `telemetry.json` (Create)
 
 *   **Type / Scope**: VS Code transparency file.
 *   **Proposed Changes**: Lists each event and property from
-    `telemetry-schema.js`, with purpose and classification (usage / error).
-    Kept in sync by the test in item 10.
+    `telemetry-schema.js`, including the common properties, with purpose
+    and classification (usage / error). Kept in sync by the test in item 10.
 
 #### 18. `.vscodeignore` (Modify)
 
 *   **Type / Scope**: Packaging.
 *   **Proposed Changes**: Add `media/demo.gif`, `reference/**`, `docs/**`,
-    `node_modules/**`. (`ROADMAP.md`, `test/**`, and `fixtures/**` are
-    already excluded; `demo.mp4` is deleted in item 9.) This matches the
-    Technical Plan §5 list.
+    `node_modules/**`. `ROADMAP.md`, `test/**`, and `fixtures/**` are
+    already excluded; `demo.mp4` is deleted in item 9.
 
 #### 19. `README.md` (Modify)
 
 *   **Type / Scope**: Marketplace page.
 *   **Proposed Changes**: Add "Compare with Commit…" to Features and the
-    Commands table; change "1200+" corpus wording to 2,228 files; add a
-    "Privacy" section (what kind of data is sent, what never is, how to turn
-    it off: VS Code telemetry setting or `apexlangView.telemetry.enabled`,
-    and a link to `telemetry.json` for the full list; known bias: users
-    behind blocking proxies are not counted).
+    Commands table; change "1200+" (line 44) to 2,228 files; add a "Privacy"
+    section: what kind of data is sent, what never is, how to turn it off
+    (VS Code telemetry setting or `apexlangView.telemetry.enabled`), a link
+    to `telemetry.json` for the full list, and the known bias (users whose
+    network VS Code cannot pass through are not counted).
 
 #### 20. `CHANGELOG.md` (Modify)
 
 *   **Type / Scope**: Release notes.
 *   **Proposed Changes**: 0.2.0 entries for anonymous telemetry, Compare with
-    Commit, the F-fixes visible to users (F5, F6, F7), and removal of the
+    Commit, the fixes users can see (F5, F6, F7, F8, F9), and removal of the
     unused orphan-detector code. Known limits: renamed-file history before
     the rename; a chosen commit resets to HEAD on file switch; unnamed
     siblings matched by position; 26.2 unverified unless G4c ran.
@@ -891,15 +1029,16 @@ All paths are relative to `tools/apexlang-view/`. Work happens on
 *   **Type / Scope**: Manual test script.
 *   **Proposed Changes**: Add: Diff-off side-by-side parity with 0.1.0 in a
     clean profile (rows, order, labels, icons, indentation); Compare with
-    Commit (including "not in a1b2c3d" and file switch); telemetry off (VS
-    Code setting, then our setting) → output channel shows nothing sent;
-    telemetry on → events appear in PostHog Live events.
+    Commit (including "Diff: not in a1b2c3d", cancel, and file switch);
+    telemetry off (VS Code setting, then our setting) → output channel shows
+    "dropped: setting off" and no "sent" lines; telemetry on → "sent N
+    events" lines and events in PostHog Live events.
 
 #### 22. `ROADMAP.md` (Modify)
 
 *   **Type / Scope**: Tracking.
-*   **Proposed Changes**: Mark items done as they land; record the Timeline
-    check result (Alternative J). The final design is this file,
+*   **Proposed Changes**: Mark items done as each phase lands; record the
+    Timeline check result (Alternative J). The final design is this file,
     `docs/DESIGN-v0.2-v0.3.md`.
 
 ### Verification Plan
@@ -907,18 +1046,23 @@ All paths are relative to `tools/apexlang-view/`. Work happens on
 *   **Compilation/Build**: none (plain JavaScript); `node --check` on every
     changed `.js` file.
 *   **Unit Tests**: `npm test`. Today 64 tests; minus 6 orphan-detector
-    tests = 58 existing, all passing, plus the new telemetry, parser-syntax,
-    css-parity, webview-ids, and diff cases (expected total stated in the
-    commit that adds them).
+    tests leaves 58 existing tests, all passing (the corpus test skips on
+    machines without the corpus), plus the new tests from items 10-15.
 *   **Package**: `npx @vscode/vsce package`; size < 100 KB; `vsce ls` shows no
     `demo.*`, `reference/`, `docs/`, `test/`, or `fixtures/`.
-*   **E2E/Integration**: browser harness from 2026-10-17 re-run on the new
-    webview; Mohammad's F5 run of `TESTING-CHECKLIST.md`; install the packaged
-    `.vsix` in a clean VS Code profile, do the side-by-side check with 0.1.0,
-    and confirm events arrive in PostHog Live events and none arrive with
-    either telemetry setting off.
-*   **Release order**: push `media/demo.gif` to GitHub `main` before the
-    Marketplace upload (G5); turn on PostHog's discard-IP setting first (G1).
+*   **E2E/Integration**:
+    *   Browser harness: the real webview HTML from `getWebviewHtml` with
+        CSP and nonces stripped, the real `graph.js` / `graph.css`, a mocked
+        `acquireVsCodeApi` that records posted messages, and real
+        `diffGraphs` payloads, served by a small local Node HTTP server
+        (rebuilt in a temp folder and deleted afterwards).
+    *   The author's manual run of `TESTING-CHECKLIST.md` in the Extension
+        Development Host.
+    *   Install the packaged `.vsix` in a clean VS Code profile, do the
+        side-by-side check with 0.1.0, and confirm events arrive in PostHog
+        Live events and none arrive with either telemetry setting off.
+*   **Before the Marketplace upload**: turn on PostHog's discard-IP setting
+    (G1) and push `media/demo.gif` to GitHub `main` (G5).
 
 --------------------------------------------------------------------------------
 

@@ -92,7 +92,7 @@ Problem: released README's "Try it" section tells Marketplace users to "open thi
 | D3 | Git diff step 2: changed-page badges in App Map | 📋 | Agreed order from 2026-07-25 office hours. |
 | D4 | Git diff step 3: compare any two refs (branch/tag) | 📋 | After D3. |
 | D5 | Diff highlighting in Graph (canvas) view | 📋 | Never existed; depends on C3. |
-| D6 | Usage telemetry | ⏳ | Depends on A6 decision. |
+| D6 | Usage telemetry | 🔨 | Built in 0.2.0 phase 3 (PostHog US, allowlist, `telemetry.json`); sends nothing until the `phc_` project key is set in `src/telemetry.js`. |
 | D7 | Plugin references (`type: plugin/<name>`) | 💤 | Researched 2026-07-24; Mohammad chose to hold. |
 | D8 | Full whole-app merged graph | 💤 | Long-term goal; deferred. |
 | D9 | Smaller ideas: export PNG/SVG, impact-of-change view, copy reference, pin two nodes to compare, legend filtering | 💤 | Captured, not prioritized. |

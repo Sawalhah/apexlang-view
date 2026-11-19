@@ -320,7 +320,7 @@ it; a *VS Code session* is the lifetime of one VS Code window.
 | `command` | `name`: openGraph, switchFile, openAppMap, toggleDiff, compareWithCommit, showLogs | a command runs (palette, button, or toolbar) |
 | `viewChanged` | `view`: tree, byType, graph | the View toggle is clicked |
 | `featureUsed` | `name`: search, jumpToSource, openExternalPage, breadcrumb | first use of that feature per panel session |
-| `fileParsed` | `sizeBucket` (<10KB, <100KB, <1MB, ≥1MB), `msBucket` (time in `parseApxToGraph` only: <50, <200, <1000, ≥1000), `nodeBucket` (<50, <500, ≥500), `suspicious` (bool) | first parse of a file per panel session — not on every keystroke |
+| `fileParsed` | `sizeBucket` (<10KB, <100KB, <1MB, >=1MB), `msBucket` (time in `parseApxToGraph` only: <50, <200, <1000, >=1000), `nodeBucket` (<50, <500, >=500), `suspicious` (bool) | first parse of a file per panel session — not on every keystroke |
 | `$exception` | `name` (error name only, never the message); `where`: closed list (`refresh.parse`, `refresh.diff`, `git.show`, `git.log`, `appMap.scan`, `webview.render`, `unhandled`); stack frames from our own files as `file.js:line` (webview frames reduced from `vscode-webview://…/graph.js` to `graph.js:line`) | a `trackError` call, a webview `error` message (which gains a `name` field), or an unhandled error from our code |
 
 *   Rate cap: at most 200 events per VS Code session; further events are

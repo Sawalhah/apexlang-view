@@ -8,6 +8,7 @@
     vscode.postMessage({
       type: 'error',
       message: ev.message,
+      name: ev.error && ev.error.name,
       stack: ev.error && ev.error.stack,
     });
   });
@@ -15,6 +16,7 @@
     vscode.postMessage({
       type: 'error',
       message: 'Unhandled promise rejection: ' + (ev.reason && ev.reason.message ? ev.reason.message : String(ev.reason)),
+      name: ev.reason && ev.reason.name,
       stack: ev.reason && ev.reason.stack,
     });
   });
@@ -133,6 +135,7 @@
   viewToggleBtn.addEventListener('click', () => {
     viewMode = VIEW_MODES[(VIEW_MODES.indexOf(viewMode) + 1) % VIEW_MODES.length];
     viewToggleBtn.textContent = VIEW_LABELS[viewMode];
+    vscode.postMessage({ type: 'viewChanged', view: viewMode });
     treeRoot.classList.toggle('canvas-mode', viewMode === 'graph');
     selectedNodeId = null;
     detailPanel.classList.add('hidden');
@@ -283,6 +286,7 @@
 
   searchBox.addEventListener('input', () => {
     searchQuery = searchBox.value.trim().toLowerCase();
+    if (searchQuery) vscode.postMessage({ type: 'featureUsed', name: 'search' });
     applySearch();
     render();
   });
@@ -845,7 +849,7 @@
     }
     showDetail(node);
     if (opts && opts.jumpToSource && typeof node.line === 'number') {
-      vscode.postMessage({ type: 'revealLine', line: node.line });
+      vscode.postMessage({ type: 'revealLine', line: node.line, feature: opts.feature });
     }
   }
 
@@ -964,7 +968,7 @@
       seg.textContent = n.label || n.identifier || n.typeName;
       seg.className = i === chain.length - 1 ? 'breadcrumb-seg current' : 'breadcrumb-seg';
       if (i < chain.length - 1) {
-        seg.addEventListener('click', () => selectAndReveal(n.id, { jumpToSource: true }));
+        seg.addEventListener('click', () => selectAndReveal(n.id, { jumpToSource: true, feature: 'breadcrumb' }));
       }
       detailBreadcrumb.appendChild(seg);
     });

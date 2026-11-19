@@ -1,0 +1,69 @@
+{
+  "description": "Every anonymous telemetry event APEXLang View can send, and every property it can carry. Nothing else is sent. Sending stops when VS Code's telemetry setting (telemetry.telemetryLevel) is off or when apexlangView.telemetry.enabled is false. Data goes to PostHog US Cloud, with IP addresses discarded. The user is identified only by a random ID created by this extension; never by machine ID, account, file names, paths, page or component names, .apx content, git data, or error message text.",
+  "commonProperties": {
+    "extVersion": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Extension version, e.g. 0.2.0." },
+    "vscodeVersion": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "VS Code version, e.g. 1.96.0." },
+    "os": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Operating system family: win32, darwin, or linux." }
+  },
+  "events": {
+    "activated": {
+      "comment": "The extension started. Counts active installs.",
+      "properties": {}
+    },
+    "command": {
+      "comment": "A command ran (Command Palette, editor button, or panel toolbar).",
+      "properties": {
+        "name": {
+          "values": ["openGraph", "switchFile", "openAppMap", "toggleDiff", "compareWithCommit", "showLogs"],
+          "classification": "SystemMetaData",
+          "purpose": "FeatureInsight"
+        }
+      }
+    },
+    "viewChanged": {
+      "comment": "The View button switched the panel between Tree, By Type, and Graph.",
+      "properties": {
+        "view": {
+          "values": ["tree", "byType", "graph"],
+          "classification": "SystemMetaData",
+          "purpose": "FeatureInsight"
+        }
+      }
+    },
+    "featureUsed": {
+      "comment": "First use of a panel feature in a panel session.",
+      "properties": {
+        "name": {
+          "values": ["search", "jumpToSource", "openExternalPage", "breadcrumb"],
+          "classification": "SystemMetaData",
+          "purpose": "FeatureInsight"
+        }
+      }
+    },
+    "fileParsed": {
+      "comment": "First parse of a file in a panel session, in coarse buckets only.",
+      "properties": {
+        "sizeBucket": { "values": ["<10KB", "<100KB", "<1MB", ">=1MB"], "classification": "SystemMetaData", "purpose": "PerformanceAndHealth" },
+        "msBucket": { "values": ["<50", "<200", "<1000", ">=1000"], "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Time spent parsing, in milliseconds." },
+        "nodeBucket": { "values": ["<50", "<500", ">=500"], "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Number of components in the file." },
+        "suspicious": { "values": [true, false], "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "The parse looks wrong (unexpected characters or garbage type names)." }
+      }
+    },
+    "$exception": {
+      "comment": "An error in this extension's own code. Never includes the error message.",
+      "properties": {
+        "where": {
+          "values": ["refresh.parse", "refresh.diff", "git.show", "git.log", "appMap.scan", "webview.render", "unhandled"],
+          "classification": "SystemMetaData",
+          "purpose": "PerformanceAndHealth",
+          "comment": "Fixed code naming the place in the extension where the error happened."
+        },
+        "$exception_list": {
+          "classification": "CallstackOrException",
+          "purpose": "PerformanceAndHealth",
+          "comment": "The error type name (e.g. TypeError) and stack frames from this extension's own files only, as file name and line number (e.g. parser.js:212)."
+        }
+      }
+    }
+  }
+}

@@ -59,6 +59,17 @@
         "title": "APEXLang View: Compare with Commit…"
       }
     ],
+    "configuration": {
+      "title": "APEXLang View",
+      "properties": {
+        "apexlangView.telemetry.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Send anonymous usage and error data (which commands and views are used, coarse parse timings, and error types with this extension's own file and line numbers). Never file names, paths, .apx content, or error messages. Also off whenever VS Code's own `#telemetry.telemetryLevel#` is off. Full list: [telemetry.json](https://github.com/Sawalhah/apexlang-view/blob/main/telemetry.json).",
+          "tags": ["telemetry", "usesOnlineServices"]
+        }
+      }
+    },
     "menus": {
       "editor/title": [
         {

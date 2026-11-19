@@ -4,6 +4,8 @@ const { parseApxToGraph, assessParseQuality } = require('./parser');
 const { guessAppRoot, buildPageIndex, injectNavStubs } = require('./page-nav');
 const { buildAppMap } = require('./app-map');
 const { diffGraphs } = require('./diff');
+const { initTelemetry, track, trackError, resetPanelSession, flushTelemetry } = require('./telemetry');
+const { sizeBucket, msBucket, nodeBucket } = require('./telemetry-schema');
 
 // Output channel for everything — panel lifecycle, parse timing, and any
 // exception (extension-side or reported up from the webview). View via
@@ -150,6 +152,7 @@ async function getContentAtRef(uri, ref) {
       logDiffReasonOnce(uri, ref, reason);
     } else {
       logError(`getContentAtRef: repository.show(${refLabel(ref)}) failed for ${uri.fsPath}`, err);
+      trackError('git.show', err);
     }
     return { reason };
   }
@@ -190,9 +193,14 @@ function activate(context) {
   output = vscode.window.createOutputChannel('APEXLang View');
   context.subscriptions.push(output);
   log('Extension activated.');
+  initTelemetry(context, log);
+  track('activated');
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('apexlangView.showLogs', () => output.show())
+    vscode.commands.registerCommand('apexlangView.showLogs', () => {
+      track('command', { name: 'showLogs' });
+      output.show();
+    })
   );
 
   process.on('uncaughtException', (err) => {
@@ -290,6 +298,7 @@ function activate(context) {
 }
 
 async function openGraphCommand(context, uri) {
+  track('command', { name: 'openGraph' });
   const targetUri = uri || vscode.window.activeTextEditor?.document.uri;
   if (!targetUri) {
     vscode.window.showWarningMessage('APEXLang View: open an .apx file first, or use "APEXLang View: Switch File".');
@@ -315,6 +324,7 @@ async function openGraphCommand(context, uri) {
 // whichever one is chosen — never touches the text editor, never opens a
 // tab. Opens the panel first if it isn't already open.
 async function switchFileCommand(context) {
+  track('command', { name: 'switchFile' });
   const files = await vscode.workspace.findFiles('**/*.apx', '**/node_modules/**', 500);
   if (files.length === 0) {
     vscode.window.showInformationMessage('APEXLang View: no .apx files found in this workspace.');
@@ -346,6 +356,7 @@ async function switchFileCommand(context) {
 // Diff button: any comparison on (HEAD or a chosen commit) -> off;
 // off -> compare with HEAD. Re-renders the current file.
 async function toggleDiffCommand() {
+  track('command', { name: 'toggleDiff' });
   diffRef = diffRef ? null : 'HEAD';
   log(diffRef ? 'Diff vs HEAD: on' : 'Diff: off');
   if (currentUri) await refresh(currentUri);
@@ -355,6 +366,7 @@ async function toggleDiffCommand() {
 // current file; the tree then highlights what changed between that commit
 // and the working copy (same markers as Diff vs HEAD).
 async function compareWithCommitCommand() {
+  track('command', { name: 'compareWithCommit' });
   if (!panel || !currentUri) {
     vscode.window.showWarningMessage('APEXLang View: open an .apx file in the APEXLang View panel first.');
     return;
@@ -372,6 +384,7 @@ async function compareWithCommitCommand() {
     commits = await repository.log({ path: uri.fsPath, maxEntries: 50 });
   } catch (err) {
     logError(`compareWithCommit: repository.log failed for ${uri.fsPath}`, err);
+    trackError('git.log', err);
     vscode.window.showInformationMessage('APEXLang View: could not read the git history of this file. See the "APEXLang View" output channel.');
     return;
   }
@@ -405,6 +418,7 @@ async function compareWithCommitCommand() {
 // panel. Opens the panel first (showing whichever file anchors the scan) if
 // it isn't already open, matching openGraphCommand's own bootstrap.
 async function openAppMapCommand(context, uri) {
+  track('command', { name: 'openAppMap' });
   const anchorUri = uri || vscode.window.activeTextEditor?.document.uri || currentUri;
   if (!anchorUri) {
     vscode.window.showWarningMessage('APEXLang View: open an .apx file first, or use "APEXLang View: Switch File", so I know which app to map.');
@@ -425,7 +439,13 @@ async function openAppMapCommand(context, uri) {
     }
   }
 
-  const appMap = buildAppMap(files);
+  let appMap;
+  try {
+    appMap = buildAppMap(files);
+  } catch (err) {
+    trackError('appMap.scan', err);
+    throw err;
+  }
   log(`App map: ${appMap.pages.length} page(s), ${appMap.edges.length} edge(s)`);
 
   if (!panel) {
@@ -438,6 +458,7 @@ async function openAppMapCommand(context, uri) {
 
 async function createPanelAndShow(context, targetUri) {
   log(`Opening panel for ${targetUri.toString()}`);
+  resetPanelSession();
   panel = vscode.window.createWebviewPanel(
     'apexlangViewGraph',
     'APEXLang Graph',
@@ -459,7 +480,16 @@ async function createPanelAndShow(context, targetUri) {
       return;
     }
     if (msg.type === 'revealLine' && typeof msg.line === 'number') {
+      track('featureUsed', { name: msg.feature === 'breadcrumb' ? 'breadcrumb' : 'jumpToSource' }, msg.feature === 'breadcrumb' ? 'breadcrumb' : 'jumpToSource');
       revealLineInEditor(currentUri, msg.line);
+      return;
+    }
+    if (msg.type === 'viewChanged') {
+      track('viewChanged', { view: msg.view });
+      return;
+    }
+    if (msg.type === 'featureUsed') {
+      track('featureUsed', { name: msg.name }, msg.name);
       return;
     }
     if (msg.type === 'switchFile') {
@@ -479,12 +509,14 @@ async function createPanelAndShow(context, targetUri) {
       return;
     }
     if (msg.type === 'openExternalPage' && msg.targetFsPath) {
+      track('featureUsed', { name: 'openExternalPage' }, 'openExternalPage');
       confirmAndOpenExternalPage(context, msg.targetFsPath, msg.label).catch((err) => logError('openExternalPage failed', err));
       return;
     }
     if (msg.type === 'error') {
       log(`Webview error: ${msg.message}`);
       if (msg.stack) log(msg.stack);
+      trackError('webview.render', { name: msg.name || 'Error', stack: msg.stack });
     }
   });
 
@@ -555,13 +587,17 @@ async function refresh(uri) {
   }
 
   let graph;
+  const parseStartedAt = Date.now();
   try {
     graph = parseApxToGraph(text);
   } catch (err) {
     logError(`refresh(${fileName}): parse failed`, err);
+    trackError('refresh.parse', err);
     vscode.window.showErrorMessage(`APEXLang View: parse failed — ${err.message}`);
     return;
   }
+
+  const parseMs = Date.now() - parseStartedAt;
 
   try {
     await resolveNavTargets(uri, graph);
@@ -587,11 +623,18 @@ async function refresh(uri) {
       }
     } catch (err) {
       logError(`refresh(${fileName}): diff vs ${refLabel(ref)} failed`, err);
+      trackError('refresh.diff', err);
     }
   }
 
   const quality = assessParseQuality(text, graph);
   const ms = Date.now() - startedAt;
+  track('fileParsed', {
+    sizeBucket: sizeBucket(Buffer.byteLength(text, 'utf8')),
+    msBucket: msBucket(parseMs),
+    nodeBucket: nodeBucket(graph.nodes.length),
+    suspicious: !!quality.suspicious,
+  }, uri.fsPath);
   log(`refresh(${fileName}): ${graph.nodes.length} nodes, ${graph.edges.length} edges, ${ms}ms${quality.suspicious ? ' [suspicious: ' + quality.reasons.join(' ') + ']' : ''}${diff ? ` [diff vs ${refLabel(ref)}: +${diff.added.length} ~${diff.changed.length} -${diff.removed.length}]` : ''}`);
   // Guard against a slow refresh finishing after a newer one started, or
   // after the user switched files or closed the panel — don't clobber the
@@ -688,6 +731,9 @@ function getWebviewHtml(webview, mediaUri) {
 </html>`;
 }
 
-function deactivate() {}
+// Gives queued telemetry a last chance to send (best effort).
+function deactivate() {
+  return flushTelemetry();
+}
 
 module.exports = { activate, deactivate };

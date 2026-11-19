@@ -24,6 +24,42 @@ Last updated: 2026-10-17
 | A9 | Search online for APEXLang issues we can handle | ✅ | Findings → D1 (static-file references), D2 (stale deleted pages). Positioning: Oracle's own extension does export/validate/complete/import; we own navigation, App Map, diff. |
 | A10 | Record everything in a plan so nothing is missed | ✅ | This file. |
 
+## A2. Requests from 2026-11-19 session
+
+| # | Request | Status | Notes |
+|---|---|---|---|
+| A11 | Check if a v0.2.0 / GIF version was released | ✅ | Not released. Marketplace, GitHub and installed copy are all 0.1.0 (232 installs, 1× 5★ on 2026-11-19). GIF + video exist only locally on `feature/git-diff` (`1b08d0c`). |
+| A12 | Review what v1 does vs what v2 plans | ✅ | See section G. |
+| A13 | Research what's new in the APEX community (4 months) for v2 | ✅ | See section G. |
+| A14 | **Anonymous logs: installs, bugs, crashes — for improving only** (top priority) | 📋 ⏳ | Plan in G3. Needs Mohammad to create an Azure Application Insights resource (free tier) and choose scope. |
+
+## G. v1 vs v2 review + research (2026-11-19)
+
+### G1. What v0.1.0 (released) does
+Commands: Open Graph View, Switch File, Open App Map, Show Logs (editor title button + Explorer right-click on `.apx`).
+Features: indented outline tree · in-tree search · `@identifier` cross-references (References / Referenced by) · cross-page navigation badges · App Map (page-to-page) · auto-collapse big groups · By Type view · Graph canvas view · breadcrumbs + keyboard nav · live refresh · theme-native.
+Problem: released README's "Try it" section tells Marketplace users to "open this folder and press F5" (developer steps). Fixed in the new README (B1).
+
+### G2. Research findings (Nov 2026)
+- APEX 26.2 shipped (download 2026-10-06; GA announced 2026-11-09). APEXlang exports can now include **translations**; file-level import; Working Copy APIs; REST Workshop retired.
+- Oracle SQL Developer for VS Code is at **26.3.1**: highlighting, completion, validation, diagnostics, **formatting**, export/import, and (26.3+) compare local APEXlang vs the connected DB app and pull changes. Its listing still shows **no outline/tree, no component navigation, no go-to-definition, no git-based semantic diff** → our lane is still open.
+- Oracle is publishing the **APEXlang grammar, skills and docs in the public domain** so AI agents (Claude, Codex) can write APEXlang (SiliconANGLE, 2026-11-04). More APEX changes will be AI-generated → people need to *see and review* what changed.
+- Top community pain = **reviewing and merging** `.apx` changes (Alex on APEX, 2026-07-24; juanl.hashnode.dev): comparison only says "page 1 differs", not which components; conflicts, collisions and dangling references are checked by hand; no 3-way merge. A readable text diff ≠ a safe merge.
+
+### G3. Anonymous telemetry plan (A14)
+- Use Microsoft's official `@vscode/extension-telemetry` → Azure Application Insights (free tier). It automatically obeys VS Code's telemetry setting (`isTelemetryEnabled`), so anyone who turned telemetry off sends nothing.
+- Send only: extension activated (version, VS Code version, OS — added by the module), which command/view was used (counts), file size bucket + parse time bucket, and **errors** (error type + our own stack frames only).
+- Never send: file paths, file names, app/page names, `.apx` content, workspace names, git info, user names.
+- Add `telemetry.json` (VS Code's transparency file), a README "Privacy" line, and an extension setting `apexlangView.telemetry.enabled` (extra off switch).
+- Install/uninstall counts come from the Marketplace publisher Reports page (no code needed); telemetry adds "active users" and crashes, but only for users who update to 0.2.0+.
+- Mohammad's step: create an Application Insights resource in Azure (his Microsoft account) and share the connection string (it's designed to be embedded in public extension code).
+
+### G4. Proposed scope (decide)
+- **0.2.0 — "trust + diff"**: telemetry (G3) · git diff vs HEAD (built) · fixes F1–F10 · new README + GIF · Ctrl+Alt+L.
+- **0.3.0 — "review changes"**: compare any two versions (branch / commit / PR) at component level (D4, upgraded) · App Map changed-page badges (D3) · positioning: "see exactly what changed — by you, a teammate, or an AI agent".
+- **0.4.0 — "safety checks"**: Problems-panel warnings Oracle's validator doesn't cover: broken static-file refs (D1), dangling `@references`, duplicate identifiers, merge collisions between two branches (3-way).
+- **Ongoing**: verify the parser on real 26.2 exports incl. translations (A8); check against Oracle's public grammar once its location is found.
+
 ## B. Release v0.2.0
 
 | # | Item | Status | Notes |

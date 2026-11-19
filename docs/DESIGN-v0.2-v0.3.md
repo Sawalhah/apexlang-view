@@ -140,13 +140,15 @@ occupies.
         sender only sends the closed event list, each install stops at 200
         events per VS Code session, and the PostHog project stays on the free
         plan with no card, so overuse can never be billed.
-    *   A `telemetry.json` file and a README "Privacy" section list every event
-        and property.
+    *   One schema in the code is the only source of the event list; a
+        generated-and-tested `telemetry.json` publishes it, and the README
+        "Privacy" section links to that file.
 *   **G2 — No visible change for existing users.** With Diff off, 0.2.0 shows
     the same rows, order, labels, icons, and indentation as 0.1.0 (tag
     `v0.1.0`), and every 0.1.0 command keeps its ID and behavior. Allowed
-    additions: the Diff button, the ▾ compare button, the `compareWithCommit`
-    command, and the telemetry setting.
+    additions (closed list): the Diff button and its `toggleDiff` command, the
+    ▾ compare button and its `compareWithCommit` command, the `ctrl+alt+l`
+    keybinding, and the telemetry setting.
 *   **G3 — Diff vs HEAD: findings fixed, package under 100 KB.** All ten
     review findings (ROADMAP section F) are fixed:
 
@@ -169,12 +171,16 @@ occupies.
     added/changed markers and old → new values as Diff vs HEAD.
 *   **G4 — Parser verified against Oracle's grammar.** The *sample corpus* is
     the APEX 26.1 sample apps: 2,228 `.apx` files, stored outside the repo at
-    `apex_podman/apex-apps`. Tests that need it skip, not fail, when it is
-    absent. A file is *suspicious* when `assessParseQuality` flags its parse as
+    `apex_podman/apex-apps/sample-apps`. Tests that need it skip, not fail,
+    when it is absent; the test's file-count floor is raised from 1,200 to
+    2,228. A file is *suspicious* when `assessParseQuality` flags its parse as
     likely wrong (unexpected characters or garbage type names).
     *   **G4a** — every `typeName` the parser produces on the sample corpus is
-        a component keyword in Oracle's 26.1 or 26.2 grammar, and the parser
-        parses all 2,228 files without error and none is suspicious.
+        a component keyword in Oracle's 26.1 or 26.2 grammar; the parser
+        parses all 2,228 files without error; and the suspicious count stays
+        at or below today's baseline of 11 (`test/corpus.test.js`). Reaching
+        zero would need parser changes, which this design does not make
+        (parse output stays identical to 0.1.0, see G2 and Non-Goals).
     *   **G4b** — the parser handles each syntax form the grammar defines
         (strings with escapes, `//` and `/* */` comments, arrays, fenced
         ``` code, nested groups), each tested with a minimal example.
@@ -298,9 +304,13 @@ it; a *VS Code session* is the lifetime of one VS Code window.
     output channel only and never send telemetry. The sender drops any
     exception with no stack frame from our files, and sends each distinct
     error (name + top own frame) at most once per VS Code session.
-*   **Allowlist:** the sender builds each payload only from the keys listed in
-    G1 and in the table below, strips any `publisher.extension/` prefix from
-    the event name, and drops everything else.
+*   **Allowlist, defined once:** `src/telemetry-schema.js` holds the only
+    copy of the closed list (event name → allowed properties and values, plus
+    the `where` codes). The sender filters every payload against it, strips
+    any `publisher.extension/` prefix from the event name, and drops
+    everything else. A unit test asserts that `telemetry.json` matches the
+    schema, and the README "Privacy" section links to `telemetry.json`
+    instead of repeating the list.
 *   Anonymous ID: a random UUID generated on first activation and stored in
     `context.globalState`; used as PostHog's `distinct_id`.
 *   Event list (closed; anything else is a bug):
@@ -308,7 +318,7 @@ it; a *VS Code session* is the lifetime of one VS Code window.
 | Event | Properties | Sent when |
 |---|---|---|
 | `activated` | `extVersion`, `vscodeVersion` (`vscode.version`), `os` (`process.platform`) | extension activates |
-| `command` | `name`: openGraph, switchFile, openAppMap, toggleDiff, compareWithCommit, showLogs; for `compareWithCommit` also `refAge`: `HEAD~1`, `≤10 back`, `>10 back` | a command runs (palette, button, or toolbar) |
+| `command` | `name`: openGraph, switchFile, openAppMap, toggleDiff, compareWithCommit, showLogs | a command runs (palette, button, or toolbar) |
 | `viewChanged` | `view`: tree, byType, graph | the View toggle is clicked |
 | `featureUsed` | `name`: search, jumpToSource, openExternalPage, breadcrumb | first use of that feature per panel session |
 | `fileParsed` | `sizeBucket` (<10KB, <100KB, <1MB, ≥1MB), `msBucket` (time in `parseApxToGraph` only: <50, <200, <1000, ≥1000), `nodeBucket` (<50, <500, ≥500), `suspicious` (bool) | first parse of a file per panel session — not on every keystroke |
@@ -349,10 +359,13 @@ the existing files. The ones that change structure:
 *   `getContentAtHead(uri)` becomes `getContentAtRef(uri, ref)`, using
     `repository.show(ref, path)`; the rest of the pipeline (`parseApxToGraph`,
     `diffGraphs`, the `graph` message) is unchanged.
-*   **Base cache:** the base file text is cached per (commit hash, path).
-    `HEAD` is resolved to a hash first, and the cache entry is dropped when the
-    repository's HEAD changes, so typing does no git work after the first
-    read. F4's sequence guard stays as a backup.
+*   **Base cache:** on each refresh, `HEAD` is resolved to a hash from
+    `repository.state.HEAD.commit` (in memory, no git call). The base file
+    text is cached under (commit hash, path); an entry keyed by a hash never
+    goes stale, so there is no invalidation logic. Only the current file's
+    entry is kept (same pattern as `pageIndexCache` in `src/extension.js`), so
+    typing does no git work after the first read. F4's sequence guard stays
+    as a backup.
 *   **Renames:** history does not follow renames (VS Code's git API `log` and
     `show` use the current path). Commits from before a rename are not listed,
     and a chosen commit where the file did not exist shows "Diff: not in
@@ -370,18 +383,21 @@ the existing files. The ones that change structure:
     each production listed under `<component>`) into a committed JSON file
     under `test/`.
 *   G4a check: in `test/corpus.test.js`, every `typeName` the parser produces
-    across the sample corpus is in that list, and no file is suspicious.
+    across the sample corpus is in that list, with 0 errors and at most 11
+    suspicious files (the existing baseline).
 *   G4b check: one minimal example per syntax form, parsed and asserted.
 *   No per-keyword parse test: the parser does not look at keywords, so such a
     test could not fail.
 
-**4. Unchanged-for-existing-users check (G2).** A test parses `graph.css` from
-tag `v0.1.0` (via `git show`) and from the working copy, and fails if any rule
-that applies to `.tree-row`, its children, or the toolbar changed in a layout
-property (margin, padding, border, width, height, position, display), except
-rules for the diff classes, which may only use `box-shadow`. Plus a required
+**4. Unchanged-for-existing-users check (G2).** The real guard is a required
 release step: open the same files side by side in 0.1.0 and 0.2.0 (Diff off)
-in a clean profile. No `jsdom` dependency (see Alternative N).
+in a clean profile and compare rows, order, labels, icons, and indentation.
+A small automated test guards the one regression found so far (F3): it reads
+the working-copy `graph.css` and asserts that `.tree-row` sets no
+`border-left` and that the diff classes set only `box-shadow`. It needs no
+git and no tag, so it keeps working after 0.3.0 changes the toolbar.
+Indentation is set inline in `media/graph.js`, not in CSS, so only the manual
+check covers it. No `jsdom` dependency (see Alternative N).
 
 **5. Packaging and docs (G3, G5).** `.vscodeignore` excludes demo media,
 `reference/`, `docs/`, and `ROADMAP.md`. New README section "Privacy"; new
@@ -520,8 +536,10 @@ starting proposal and can be changed before the decision.
     contributed command, so the commit hash may not be reliably available; the
     built-in Timeline item shape can change between versions.
 *   **Reason for Rejection**: Unverified dependency on undocumented data.
-    Re-checked during the build: if the commit hash is available, the Timeline
-    action is added alongside the picker.
+    0.2.0 ships the picker as the only entry point. Whether a Timeline item
+    passes the commit hash is checked during the build and recorded in
+    ROADMAP; if it does, a Timeline action is a 0.3.0 candidate (it would add
+    a command to the G2 additions and the `command.name` list).
 
 ### Alternative K: Opt-in telemetry (off until the user turns it on)
 
@@ -545,6 +563,8 @@ starting proposal and can be changed before the decision.
 *   **Pros**: Finer control per event type.
 *   **Cons**: More state to keep for a few hundred users.
 *   **Reason for Rejection**: The single cap already protects the free quota.
+    (Per-error dedupe in §1 is kept for a different reason: one crash in a
+    loop should not use up the whole 200-event cap.)
 
 ### Alternative N: jsdom DOM comparison for G2
 
@@ -552,7 +572,7 @@ starting proposal and can be changed before the decision.
 *   **Cons**: jsdom does no layout, so it could not have caught F3 (a 3px
     shift); adds a dev dependency.
 *   **Reason for Rejection**: Cannot detect the layout changes G2 is about;
-    replaced by the CSS-rule test plus a manual side-by-side check.
+    replaced by a manual side-by-side check plus a narrow CSS test for F3.
 
 ## Non-Functional Requirements
 
@@ -575,7 +595,7 @@ starting proposal and can be changed before the decision.
 | 4 | Reach of the data: only users who update to 0.2.0, have telemetry on, and can reach PostHog through VS Code's proxy settings are counted | Known bias, stated in the README; installs and uninstalls come from the Marketplace Reports page. |
 | 5 | Git failures: no repo, untracked file, shallow clone, file absent at the chosen commit, detached HEAD, git still loading | Explicit states ("Diff: no git", "Diff: not tracked", "Diff: not in a1b2c3d"); wait up to 5 seconds for git to load; HEAD resolved to a hash. |
 | 6 | Other extensions' errors reported as ours | Single capture path through the logger (limited to our extension); process-wide handlers never send; exceptions without an own-file frame dropped. |
-| 7 | Visible regression for 0.1.0 users | CSS-rule test against tag `v0.1.0` plus a manual side-by-side check in a clean profile. |
+| 7 | Visible regression for 0.1.0 users | Manual side-by-side check against 0.1.0 in a clean profile (the main guard, required before upload); a CSS test guards the F3 row shift. |
 | 8 | 0.2.0 misbehaves after release | Tag `v0.1.0` and the kept VSIX at `tools/apexlang-view/apexlang-view-0.1.0.vsix`: rebuild from `v0.1.0` and publish it as 0.2.1. Telemetry can be cut without a release by revoking the key (see item 1). |
 | 9 | Unnamed sibling components matched by position in the diff | Known limit: inserting an unnamed sibling can show later siblings as changed. |
 | 10 | Renamed files lose history before the rename | Known limit, documented in the CHANGELOG. |

@@ -33,6 +33,10 @@ Last updated: 2026-10-17
 | A13 | Research what's new in the APEX community (4 months) for v2 | ✅ | See section G. |
 | A14 | **Anonymous logs: installs, bugs, crashes — for improving only** (top priority) | 📋 ⏳ | Plan in G3. Needs Mohammad to create an Azure Application Insights resource (free tier) and choose scope. |
 
+| A15 | Use `/egm:egm-draft` to write a design doc for what we're building | 🔨 | Section-by-section with approval gates. Working file `design_draft.md` → final `docs/DESIGN-v0.2-v0.4.md`. Then `/egm:egm-review` on it. |
+| A16 | v1 had no APEXlang language reference — now Oracle publishes one; use it | 🔨 | Reference: docs.oracle.com/en/database/oracle/apex/26.2/apxln/ (per-component pages + `apexlang.ebnf`). Saved `reference/apexlang-26.1.ebnf` (build 26.1.0+3102) and `reference/apexlang-26.2.ebnf` (build 26.2.0+3479). 26.2 vs 26.1: +163 keywords, −1 (`uiDefaultsReference`). Our parser is generic (no hardcoded component list), so the grammar is for conformance tests + a component/property catalog, not a parser rewrite. **Before packaging: add `reference/**`, `docs/**`, `design_draft.md` to `.vscodeignore`.** |
+| A17 | Save the session so resuming needs no searching | ✅ | Pointer added to `MaksabStudio/CLAUDE.md` section 6 (loaded every session) + memory `apexlang_view_resume_point.md`. Resume: start Claude in `MaksabStudio`, type "continue". |
+
 ## G. v1 vs v2 review + research (2026-11-19)
 
 ### G1. What v0.1.0 (released) does

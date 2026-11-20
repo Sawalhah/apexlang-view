@@ -235,9 +235,8 @@ occupies.
 
 ## Open Questions
 
-*   **PostHog project key:** when will the US-cloud project key (`phc_…`) be
-    shared? It is designed to be public in client code; the build can use a
-    placeholder until then.
+*   ~~**PostHog project key**~~ — resolved 2026-11-20: EU Cloud project
+    "APEXLang View" (id 359325); key in `src/telemetry.js`.
 *   **26.2 sample:** can one app be exported from a 26.2 instance before
     release, so G4c can run?
 
@@ -733,7 +732,9 @@ by file; this is the order to build them in.
                 "where": "refresh.parse",
                 "$exception_list": [ { "type": "TypeError", "value": "TypeError",
                   "stacktrace": { "type": "raw", "frames": [
-                    { "filename": "parser.js", "lineno": 212, "in_app": true } ] } } ] } } ] }
+                    { "platform": "node:javascript", "function": "parseApxToGraph",
+                      "filename": "parser.js", "lineno": 212, "colno": 15,
+                      "in_app": true } ] } } ] } } ] }
         ```
 
         `value` is the error name, never the message.
@@ -751,10 +752,11 @@ by file; this is the order to build them in.
 *   **Type / Scope**: VS Code-side wrapper.
 *   **Proposed Changes**:
     *   Constants `POSTHOG_HOST = 'https://eu.i.posthog.com'` (EU region,
-        decided) and `POSTHOG_PROJECT_KEY` (public `phc_` key; a placeholder
-        until shared).
-    *   `initTelemetry(context, log)`: if the key is still the placeholder,
-        create nothing. Otherwise create or read the anonymous UUID
+        decided) and `POSTHOG_PROJECT_KEY` (public `phc_` key of EU project
+        359325).
+    *   `initTelemetry(context, log)`: if the key is not a `phc_` key, or the
+        extension is not running in Production mode (F5 / test runs), create
+        nothing. Otherwise create or read the anonymous UUID
         (`crypto.randomUUID()`) in `context.globalState` (key
         `apexlangView.anonId`); build the sender with `common`,
         `ownRoot = context.extensionPath`, `isEnabled` reading the setting,
@@ -1077,8 +1079,10 @@ by file; this is the order to build them in.
     *   Install the packaged `.vsix` in a clean VS Code profile, do the
         side-by-side check with 0.1.0, and confirm events arrive in PostHog
         Live events and none arrive with either telemetry setting off.
-*   **Before the Marketplace upload**: turn on PostHog's discard-IP setting
-    (G1) and push `media/demo.gif` to GitHub `main` (G5).
+*   **Before the Marketplace upload**: PostHog's discard-IP setting is on
+    (G1; done 2026-11-20), and push `media/demo.gif` and `telemetry.json` to
+    GitHub `main` (G5; the README and the setting's description link to
+    them there).
 
 --------------------------------------------------------------------------------
 

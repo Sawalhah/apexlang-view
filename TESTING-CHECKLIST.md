@@ -156,15 +156,31 @@ separate floating boxes.
 - [ ] New, uncommitted file: the button reads **Diff: not tracked**. A file
       outside any git repo: **Diff: no git**. Neither spams the log (one
       line per file).
+- [ ] **Highest risk (only tested against a fake git so far):** close VS
+      Code, reopen it, and turn Diff on immediately while git is still
+      loading. It should show **Diff: HEAD** with highlights (it waits up to
+      5 s for git), not **Diff: no git**.
+- [ ] **Highest risk:** a brand-new repo (`git init`, no commits) with an
+      `.apx` file: Diff reads **Diff: not in HEAD**, and nothing errors in
+      the log.
 
-## 14. Telemetry (only once the PostHog key is set in `src/telemetry.js`)
+## 14. Telemetry (installed VSIX only)
+Telemetry is off in the Extension Development Host (F5) on purpose, so dev
+runs never count as users. Test this with `apexlang-view-0.2.0.vsix`
+installed in a clean profile (**Extensions → … → Install from VSIX…**).
+The log shows `telemetry: off in development/test runs` under F5.
 - [ ] With VS Code telemetry off (`telemetry.telemetryLevel: off`): use the
       panel; "Show Logs" shows no `telemetry: sent` lines.
 - [ ] VS Code telemetry on, `apexlangView.telemetry.enabled: false`: the log
       shows `telemetry: dropped: setting off` once, and no `sent` lines.
 - [ ] Both on: after ~30 s or 20 actions the log shows
-      `telemetry: sent N events`, and the events appear in PostHog → Activity
-      (Live events) with no file names, paths, or messages in any property.
+      `telemetry: sent N events`, and the events appear in PostHog (EU
+      project "APEXLang View") → Activity with no file names, paths, or
+      messages in any property.
+- [ ] Warning sign: if the log ever shows
+      `telemetry: dropped: error without own stack frame` right after an
+      error from this extension, error reporting is broken (VS Code may be
+      hiding the file paths); report it.
 
 ## Known-acceptable (don't report as bugs)
 - Clicking a file in Explorer opens a native editor tab before the graph

@@ -122,8 +122,8 @@ test('error payload has the name, where code, and own frames only, never the mes
     type: 'TypeError',
     value: 'TypeError',
     stacktrace: { type: 'raw', frames: [
-      { filename: 'parser.js', lineno: 212, in_app: true },
-      { filename: 'extension.js', lineno: 550, in_app: true },
+      { platform: 'node:javascript', function: 'parseApxToGraph', filename: 'parser.js', lineno: 212, colno: 15, in_app: true },
+      { platform: 'node:javascript', function: 'refresh', filename: 'extension.js', lineno: 550, colno: 13, in_app: true },
     ] },
   }]);
   const raw = JSON.stringify(requests);
@@ -139,7 +139,9 @@ test('webview frames (resource URLs under the install path) count as own', async
   err.stack = 'TypeError: boom\n    at render (https://file+.vscode-resource.vscode-cdn.net/c%3A/Users/someone/.vscode/extensions/mohammadsawalhah.apexlang-view-0.2.0/media/graph.js:640:9)';
   sender.sendErrorData(err, { where: 'webview.render' });
   const [event] = await sentEvents(sender, requests);
-  assert.deepEqual(event.properties.$exception_list[0].stacktrace.frames, [{ filename: 'graph.js', lineno: 640, in_app: true }]);
+  assert.deepEqual(event.properties.$exception_list[0].stacktrace.frames, [
+    { platform: 'node:javascript', function: 'render', filename: 'graph.js', lineno: 640, colno: 9, in_app: true },
+  ]);
 });
 
 test('unknown where codes become "unhandled"; errors without own frames are dropped', async () => {

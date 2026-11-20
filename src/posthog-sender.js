@@ -76,22 +76,36 @@ const OWN_FILES = new Set([
 ]);
 
 // Keeps only stack frames from this extension's own files, reduced to
-// { filename: basename, lineno }. A frame is ours when its location is under
-// ownRoot (this matches both Node paths and the webview's resource URLs,
-// which embed the same install path), or, if the path was redacted, when its
-// file name is one of ours and it is not inside node_modules.
+// PostHog's raw JavaScript frame: { platform, function, filename (basename
+// only), lineno, colno, in_app }. PostHog rejects frames without `platform`.
+// `function` is the name of one of our own functions, never user data.
+// A frame is ours when its location is under ownRoot (this matches both
+// Node paths and the webview's resource URLs, which embed the same install
+// path), or, if the path was redacted, when its file name is one of ours and
+// it is not inside node_modules.
+const FRAME_RE = /^\s*at\s+(?:(.+?)\s+\()?((?:[a-z][\w+.-]*:\/\/)?[^\s()]+):(\d+):(\d+)\)?\s*$/i;
+const SAFE_FUNCTION = /^[\w$.<>\[\] ]{1,80}$/;
+
 function ownFrames(stack, ownRoot) {
   if (!stack) return [];
   const root = ownRoot ? normalizeLocation(ownRoot).replace(/\/+$/, '') + '/' : null;
   const frames = [];
   for (const line of String(stack).split('\n')) {
-    const m = line.match(/\(?((?:[a-z][\w+.-]*:\/\/)?[^\s()]+):(\d+):\d+\)?\s*$/i);
+    const m = line.match(FRAME_RE);
     if (!m) continue;
-    const location = normalizeLocation(m[1]);
+    const location = normalizeLocation(m[2]);
     const underRoot = root !== null && location.includes(root);
     const ownName = OWN_FILES.has(path.posix.basename(location)) && !location.includes('/node_modules/');
     if (!underRoot && !ownName) continue;
-    frames.push({ filename: path.posix.basename(location), lineno: Number(m[2]), in_app: true });
+    const fn = m[1] && SAFE_FUNCTION.test(m[1]) ? m[1] : '<anonymous>';
+    frames.push({
+      platform: 'node:javascript',
+      function: fn,
+      filename: path.posix.basename(location),
+      lineno: Number(m[3]),
+      colno: Number(m[4]),
+      in_app: true,
+    });
     if (frames.length >= MAX_FRAMES) break;
   }
   return frames;

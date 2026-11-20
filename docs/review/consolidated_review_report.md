@@ -49,7 +49,7 @@ Stage 8 Z19–Z22 and Stage 9 I12–I26 applied. Stage 7 declined Nits are liste
 
 ## Open items carried into the build
 
-*   PostHog project key (`phc_…`, US cloud) not shared yet; the build uses a placeholder and sends nothing until it is set.
+*   ~~PostHog project key~~ — resolved 2026-11-20: EU Cloud project "APEXLang View" (id 359325), key in `src/telemetry.js`.
 *   PostHog wire-format field names to be confirmed against PostHog's capture docs in phase 3.
 *   26.2 export for G4c (optional before release).
 *   Merge `feature/git-diff` → `dev` and any publish still need the author's explicit go-ahead.

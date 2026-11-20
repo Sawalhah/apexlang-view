@@ -35,6 +35,12 @@ function initTelemetry(context, log) {
     log('telemetry: no project key configured; nothing will be sent');
     return;
   }
+  // Development (F5) and test runs never send: they would count as real
+  // users and skew the 0.3.0 decision data. Only the installed extension sends.
+  if (context.extensionMode !== vscode.ExtensionMode.Production) {
+    log('telemetry: off in development/test runs; nothing will be sent');
+    return;
+  }
   let distinctId = context.globalState.get(ANON_ID_KEY);
   if (!distinctId) {
     distinctId = crypto.randomUUID();

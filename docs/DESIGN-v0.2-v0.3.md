@@ -170,20 +170,28 @@ occupies.
     what changed between that commit and the working copy, with the same
     added/changed markers and old → new values as Diff vs HEAD.
 *   **G4 — Parser verified against Oracle's grammar.** The *sample corpus* is
-    the APEX 26.1 sample apps: 2,228 `.apx` files, stored outside the repo at
-    `apex_podman/apex-apps/sample-apps`. Tests that need it skip, not fail,
-    when it is absent; the test's file-count floor is raised from 1,200 to
-    2,228. A file is *suspicious* when `assessParseQuality` flags its parse as
-    likely wrong (unexpected characters or garbage type names).
+    Oracle's APEX 26.1 sample, starter, and utility apps: 2,228 `.apx` files,
+    stored outside the repo at `apex_podman/apex-apps` (the `sample-apps`
+    folder alone is 1,263; corrected during the build). Tests that need it
+    skip, not fail, when it is absent; the test's file-count floor is raised
+    from 1,200 to 2,228. A file is *suspicious* when `assessParseQuality`
+    flags its parse as likely wrong (unexpected characters or garbage type
+    names).
     *   **G4a** — every `typeName` the parser produces on the sample corpus is
         a component keyword in Oracle's 26.1 or 26.2 grammar; the parser
         parses all 2,228 files without error; and the suspicious count stays
-        at or below today's baseline of 11 (`test/corpus.test.js`). Reaching
-        zero would need parser changes, which this design does not make
-        (parse output stays identical to 0.1.0, see G2 and Non-Goals).
+        at or below the baseline of 16 for the whole tree (11 of them in
+        `sample-apps`; `test/corpus.test.js`). Reaching zero would need
+        parser work this design does not plan.
     *   **G4b** — the parser handles each syntax form the grammar defines
         (strings with escapes, `//` and `/* */` comments, arrays, fenced
         ``` code, nested groups), each tested with a minimal example.
+    *   **Parser fixes found by these tests (decided by author during the
+        build, 2026-11-20):** names containing `$` (Interactive Grid columns
+        such as `APEX$ROW_ACTION`; 0.1.0 showed a bogus `ROW_ACTION`
+        component), `/* */` comments that start a line, and escapes in quoted
+        names. Across the corpus, exactly 30 of 2,228 files parse differently
+        from 0.1.0, all because of `$` names.
     *   **G4c** (only if a 26.2 export is obtained before release) — the same
         check on that export; otherwise noted as unverified in the CHANGELOG.
 *   **G5 — README for users.** The Marketplace page explains what the extension
@@ -210,7 +218,8 @@ occupies.
     1.9 MB; it is used in development and tests only.
 *   **Rewriting the parser from the grammar.** The current parser is generic (it
     reads any block and property name), parses all 2,228 sample-corpus files
-    without error, and the grammar is used to test it, not replace it.
+    without error, and the grammar is used to test it, not replace it. Small
+    fixes the grammar tests expose are allowed (see G4).
 *   **Telemetry about the user or their application:** no file names, paths,
     page or component names, `.apx` content, workspace names, git data, error
     message text, or personal identity.
@@ -243,8 +252,9 @@ only through messages:
     `toggleDiff`, `openExternalPage`, `error`
 *   extension → webview: `fileChanged`, `graph`, `appMap`
 
-`parser.js` has not changed since 0.1.0 (`git diff v0.1.0..HEAD` shows no
-change to it), so parse output for any file is identical to 0.1.0.
+`parser.js` had not changed since 0.1.0 when this design was written. The
+0.2.0 build adds three small fixes found by the grammar tests (see G4);
+parse output is otherwise identical to 0.1.0.
 
 Terms: a *panel session* runs from opening the APEXLang View panel to closing
 it; a *VS Code session* is the lifetime of one VS Code window.
@@ -384,8 +394,8 @@ the existing files. The ones that change structure:
     each production listed under `<component>`) into a committed JSON file
     under `test/`.
 *   G4a check: in `test/corpus.test.js`, every `typeName` the parser produces
-    across the sample corpus is in that list, with 0 errors and at most 11
-    suspicious files (the existing baseline).
+    across the sample corpus is in that list, with 0 errors and at most 16
+    suspicious files (the baseline for the whole tree).
 *   G4b check: one minimal example per syntax form, parsed and asserted.
 *   No per-keyword parse test: the parser does not look at keywords, so such a
     test could not fail.
@@ -945,8 +955,9 @@ by file; this is the order to build them in.
         hand, not kept) from `reference/apexlang-26.1.ebnf` and
         `-26.2.ebnf`: every component keyword, i.e. the first quoted string
         of each production listed under `<component>`.
-    *   `corpus.test.js`: raise `minFiles` from 1,200 to 2,228; keep
-        `maxErrors: 0` and `maxSuspicious: 11`; replace the local copy of the
+    *   `corpus.test.js`: point the root at `apex-apps` (not `sample-apps`);
+        raise `minFiles` from 1,200 to 2,228; keep `maxErrors: 0`; set
+        `maxSuspicious: 16` (the whole tree); replace the local copy of the
         quality check (lines 39-73) with the exported `assessParseQuality`
         from `src/parser.js`.
     *   G4a check: for every file **not** flagged suspicious, every produced

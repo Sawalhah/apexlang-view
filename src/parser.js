@@ -10,11 +10,27 @@
 //   refs:     @path/to/thing        (component reference)
 //   token:    #PLACEHOLDER#         (e.g. #DEFAULT#)
 //
-// Not spec-complete (no formal grammar file is public — this is reverse-fit to
-// real exports). Good enough to build a structural tree for visualization.
+// Not spec-complete: reverse-fit to real exports before Oracle published its
+// grammar. Since 0.2.0 it is tested against Oracle's official EBNF
+// (reference/apexlang-26.*.ebnf; test/corpus.test.js, test/parser-syntax.test.js).
+// Good enough to build a structural tree for visualization.
 
+// `$` appears in generated names such as Interactive Grid columns
+// `APEX$ROW_ACTION`, `APEX$ROW_SELECTOR`, and `DERIVED$01` (added in 0.2.0;
+// before that the `$` split the name and the tail showed up as a bogus type).
 function isIdentChar(ch) {
-  return /[A-Za-z0-9_\-./]/.test(ch);
+  return /[A-Za-z0-9_\-./$]/.test(ch);
+}
+
+// Quoted names use the grammar's escapes (\" \\ \/ \b \f \n \r \t \uXXXX),
+// which are exactly JSON's string escapes.
+function unescapeQuoted(raw) {
+  if (raw.indexOf('\\') < 0) return raw;
+  try {
+    return JSON.parse(`"${raw}"`);
+  } catch {
+    return raw;
+  }
 }
 
 function isWhitespace(ch) {
@@ -62,7 +78,7 @@ class Cursor {
         this.pos++;
       }
       if (!this.eof()) this.pos++; // consume closing quote
-      return this.text.slice(start + 1, this.pos - 1);
+      return unescapeQuoted(this.text.slice(start + 1, this.pos - 1));
     }
     return this.readWord();
   }
@@ -198,27 +214,46 @@ function parseEntries(cur, closeChar) {
   return entries;
 }
 
-// Strips full-line `//` comments (not officially documented, defensive only —
-// APEXLang's comment syntax isn't confirmed anywhere in Oracle's published
-// reference, this is a guess). Skips content inside ``` fenced blocks so it
-// never mangles a `//` that's part of embedded JS/CSS/PL-SQL source.
-function stripLineComments(text) {
+// Strips comments as Oracle's grammar defines them (`//` to end of line, and
+// `/* ... */`), but only where a comment STARTS a line: values such as
+// `files/*.js` or URLs are never touched. Skips content inside ``` fenced
+// blocks so it never mangles comments that are part of embedded
+// JS/CSS/PL-SQL source. Line count is preserved (comment lines are blanked,
+// not removed) so node line numbers still match the original file.
+function stripComments(text) {
   const lines = text.split('\n');
   let inFence = false;
+  let inBlockComment = false;
   return lines
     .map((line) => {
+      if (inBlockComment) {
+        const end = line.indexOf('*/');
+        if (end < 0) return '';
+        inBlockComment = false;
+        return ' '.repeat(end + 2) + line.slice(end + 2);
+      }
       if (/^\s*```/.test(line)) {
         inFence = !inFence;
         return line;
       }
       if (inFence) return line;
-      return /^\s*\/\//.test(line) ? '' : line;
+      if (/^\s*\/\//.test(line)) return '';
+      const open = line.match(/^(\s*)\/\*/);
+      if (open) {
+        const end = line.indexOf('*/', open[0].length);
+        if (end < 0) {
+          inBlockComment = true;
+          return '';
+        }
+        return ' '.repeat(end + 2) + line.slice(end + 2);
+      }
+      return line;
     })
     .join('\n');
 }
 
 function parseApx(text) {
-  const cleaned = stripLineComments(text);
+  const cleaned = stripComments(text);
   const cur = new Cursor(cleaned);
   const roots = parseEntries(cur, ' '); // sentinel: never matches, consumes to EOF
   return roots;
@@ -230,7 +265,7 @@ function parseApx(text) {
 // nested blocks inside groups (rare) still become child nodes.
 // 0-based line number for a character offset — good enough for
 // click-to-navigate (jumps to the start of the block's declaration line;
-// doesn't need to be column-precise). Note: stripLineComments() preserves
+// doesn't need to be column-precise). Note: stripComments() preserves
 // line COUNT (blanks comment lines rather than removing them), so offsets
 // computed against the cleaned text still map to the right line in the
 // original file.
@@ -340,7 +375,7 @@ function collectNavTargets(nodes) {
 
 function parseApxToGraph(text) {
   _nodeSeq = 0;
-  const cleanedText = stripLineComments(text);
+  const cleanedText = stripComments(text);
   const cur = new Cursor(cleanedText);
   const entries = parseEntries(cur, ' ');
   const nodes = [];

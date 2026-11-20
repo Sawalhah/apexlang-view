@@ -12,3 +12,7 @@ corpus-report.html
 .git/**
 **/*.map
 ROADMAP.md
+media/demo.gif
+reference/**
+docs/**
+node_modules/**

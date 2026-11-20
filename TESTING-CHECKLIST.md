@@ -127,6 +127,45 @@ separate floating boxes.
       event" Node-inspector line is now filtered out — if you see it,
       something regressed).
 
+## 12. Same look as 0.1.0 with Diff off (0.2.0 release gate)
+- [ ] In a clean VS Code profile, install `apexlang-view-0.1.0.vsix` and the
+      new `apexlang-view-0.2.0.vsix` in two windows (or one after the other)
+      and open the same files (e.g. `p00007-buttons-and-refs.apx`,
+      `p00011-interactive-report.apx`).
+- [ ] With Diff off, rows, order, labels, icons, and indentation match
+      exactly. The only new things are the Diff button and the ▾ next to it.
+- [ ] Interactive Grid files: columns like `APEX$ROW_ACTION` now show as
+      `column APEX$ROW_ACTION` (in 0.1.0 they showed as a separate
+      `ROW_ACTION` component) — expected fix.
+
+## 13. Diff vs HEAD and Compare with Commit
+- [ ] Open a tracked `.apx` file, click **Diff: Off** → it reads
+      **Diff: HEAD**. Edit a label (e.g. `label: Apply Changes` →
+      `Apply Changes TEST`) and save: the row gets a yellow bar, the node
+      count shows `+0 ~1 -0 vs HEAD`.
+- [ ] Select that row: the details panel shows old → new. Keep typing: the
+      open panel updates. Close the panel and type again: it stays closed.
+- [ ] Remove a property line: the details panel shows it as old → (none).
+- [ ] Click **Diff: HEAD** → back to **Diff: Off**, highlighting gone.
+- [ ] Click **▾** → a list of the last commits that changed this file
+      (short hash, first message line, date). Pick an older one: the button
+      reads **Diff: a1b2c3d** and highlights the differences. Press Escape
+      in the list instead: nothing changes.
+- [ ] With a commit chosen, switch to another file: the button falls back
+      to **Diff: HEAD**.
+- [ ] New, uncommitted file: the button reads **Diff: not tracked**. A file
+      outside any git repo: **Diff: no git**. Neither spams the log (one
+      line per file).
+
+## 14. Telemetry (only once the PostHog key is set in `src/telemetry.js`)
+- [ ] With VS Code telemetry off (`telemetry.telemetryLevel: off`): use the
+      panel; "Show Logs" shows no `telemetry: sent` lines.
+- [ ] VS Code telemetry on, `apexlangView.telemetry.enabled: false`: the log
+      shows `telemetry: dropped: setting off` once, and no `sent` lines.
+- [ ] Both on: after ~30 s or 20 actions the log shows
+      `telemetry: sent N events`, and the events appear in PostHog → Activity
+      (Live events) with no file names, paths, or messages in any property.
+
 ## Known-acceptable (don't report as bugs)
 - Clicking a file in Explorer opens a native editor tab before the graph
   catches up — unavoidable VS Code behavior, already discussed/accepted.

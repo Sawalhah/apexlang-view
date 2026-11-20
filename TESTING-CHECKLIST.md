@@ -181,6 +181,23 @@ The log shows `telemetry: off in development/test runs` under F5.
       `telemetry: dropped: error without own stack frame` right after an
       error from this extension, error reporting is broken (VS Code may be
       hiding the file paths); report it.
+- [ ] Error reaches PostHog (U3): turn Diff on with `git.enabled: false`
+      set (the button reads "Diff: no git"), or force any parse error; after
+      ~30 s the `$exception` shows in PostHog → Error tracking with
+      `extension.js` / `parser.js` frames and no paths.
+
+## 15. Ultrareview fixes (2026-11-20)
+- [ ] `Alt+Shift+L` (Win/Linux) / `Cmd+Alt+L` (Mac) opens the view for the
+      active `.apx` file; on Windows, AltGr+L in an `.apx` file types the
+      layout's character (e.g. `ł` on Polish), not the view.
+- [ ] Select a node (detail panel open), then add a new block ABOVE it in
+      the file: the same node stays selected and the panel shows its
+      values. Delete the selected block: the panel closes.
+- [ ] Collapse a group, add a block above it: it stays collapsed.
+- [ ] Diff on for a new (uncommitted) file: button says "Diff: not
+      tracked"; typing adds no new lines to the log.
+- [ ] With `"git.enabled": false`: Diff shows "Diff: no git";
+      Compare with Commit says the file is not in a git repository.
 
 ## Known-acceptable (don't report as bugs)
 - Clicking a file in Explorer opens a native editor tab before the graph

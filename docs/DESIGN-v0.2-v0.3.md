@@ -150,7 +150,7 @@ occupies.
     the same rows, order, labels, icons, and indentation as 0.1.0 (tag
     `v0.1.0`), and every 0.1.0 command keeps its ID and behavior. Allowed
     additions (closed list): the Diff button and its `toggleDiff` command, the
-    ▾ compare button and its `compareWithCommit` command, the `ctrl+alt+l`
+    ▾ compare button and its `compareWithCommit` command, the `alt+shift+l` (was `ctrl+alt+l`, ROADMAP U1)
     keybinding, and the telemetry setting.
 *   **G3 — Diff vs HEAD: findings fixed, package under 100 KB.** All ten
     review findings (ROADMAP section F) are fixed:

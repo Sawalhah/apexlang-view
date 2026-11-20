@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { createPostHogSender, MAX_EVENTS_PER_SESSION, BATCH_SIZE } = require('../src/posthog-sender');
+const { createPostHogSender, ownFrames, encodeFrames, decodeFrames, MAX_EVENTS_PER_SESSION, BATCH_SIZE } = require('../src/posthog-sender');
 const schema = require('../src/telemetry-schema');
 
 const OWN_ROOT = 'C:\\Users\\someone\\.vscode\\extensions\\mohammadsawalhah.apexlang-view-0.2.0';
@@ -160,6 +160,46 @@ test('the same error is sent once per session', async () => {
   sender.sendErrorData(ownError(), { where: 'refresh.parse' });
   sender.sendErrorData(ownError(), { where: 'refresh.parse' });
   assert.equal((await sentEvents(sender, requests)).length, 1);
+});
+
+// VS Code's TelemetryLogger.logError may redact every path in the stack,
+// file name included, before the sender sees it. telemetry.js passes the
+// frames it took from the original stack in data.ownFrames.
+test('frames passed in data.ownFrames are used when the stack was redacted', async () => {
+  const { sender, requests } = makeSender();
+  const frames = ownFrames(ownError().stack, OWN_ROOT);
+  const redacted = new Error('<REDACTED: user-file-path>');
+  redacted.name = 'TypeError';
+  redacted.stack = 'TypeError: x\n    at parseApxToGraph (<REDACTED: user-file-path>:212:15)';
+  assert.deepEqual(ownFrames(redacted.stack, OWN_ROOT), [], 'redacted stack has no frames of its own');
+  sender.sendErrorData(redacted, { where: 'refresh.parse', ownFrames: encodeFrames(frames) });
+  const [event] = await sentEvents(sender, requests);
+  assert.deepEqual(event.properties.$exception_list[0].stacktrace.frames, frames);
+  assert.ok(!('ownFrames' in event.properties), 'the transport value itself is not sent');
+});
+
+test('encoded frames contain no path, and decoding accepts only our own file names', () => {
+  const text = encodeFrames(ownFrames(ownError().stack, OWN_ROOT));
+  assert.equal(text, 'parser.js:212:15:parseApxToGraph,extension.js:550:13:refresh');
+  assert.ok(!/[\\/]/.test(text));
+  assert.deepEqual(decodeFrames('C:\\Users\\x\\secret.apx:1:1:f,other.js:2:2:g,diff.js:3:4:has spaces/slash'), [
+    { platform: 'node:javascript', function: '<anonymous>', filename: 'diff.js', lineno: 3, colno: 4, in_app: true },
+  ]);
+  assert.deepEqual(decodeFrames(undefined), []);
+});
+
+test('function names VS Code would treat as secrets are sent as <anonymous>', () => {
+  const text = encodeFrames([{ filename: 'diff.js', lineno: 1, colno: 1, function: 'cacheKey' }]);
+  assert.equal(text, 'diff.js:1:1:<anonymous>');
+});
+
+test('the same frame under different where codes is sent once per where code', async () => {
+  const { sender, requests } = makeSender();
+  sender.sendErrorData(ownError(), { where: 'git.show' });
+  sender.sendErrorData(ownError(), { where: 'git.log' });
+  sender.sendErrorData(ownError(), { where: 'git.log' });
+  const events = await sentEvents(sender, requests);
+  assert.deepEqual(events.map((e) => e.properties.where), ['git.show', 'git.log']);
 });
 
 test('a batch is sent automatically once BATCH_SIZE events are queued', async () => {

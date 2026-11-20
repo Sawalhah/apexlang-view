@@ -103,6 +103,7 @@
     if (status.reason === 'untracked') return 'Diff: not tracked';
     if (status.reason === 'noRepo') return 'Diff: no git';
     if (status.reason === 'notInCommit') return `Diff: not in ${refLabel(status.ref)}`;
+    if (status.reason === 'error') return 'Diff: failed (see log)';
     return `Diff: ${refLabel(status.ref)}`;
   }
 
@@ -164,6 +165,7 @@
     if (msg.type === 'graph') {
       showingAppMap = false;
       const isNewFile = currentGraph === null || msg.fileName !== currentFileName;
+      const previousGraph = currentGraph;
       currentGraph = msg.graph;
       currentFileName = msg.fileName;
       currentDiff = msg.diff || null;
@@ -180,8 +182,22 @@
         // legible instead of a wall of rows — still one click away.
         collapsed = autoCollapseDefaults(currentGraph);
       } else {
-        const validIds = new Set(currentGraph.nodes.map((n) => n.id));
-        collapsed = new Set([...collapsed].filter((id) => validIds.has(id) || id.startsWith('type:')));
+        // Node ids are positional, so adding a block above shifts them.
+        // Carry the selection and collapsed rows over by each node's
+        // structural pathKey; a node that no longer exists drops out.
+        // Nodes without a pathKey (external-page stubs) keep their id if it
+        // still exists.
+        const oldById = new Map(previousGraph.nodes.map((n) => [n.id, n]));
+        const newIds = new Set(currentGraph.nodes.map((n) => n.id));
+        const newIdByKey = new Map(currentGraph.nodes.filter((n) => n.pathKey).map((n) => [n.pathKey, n.id]));
+        const remap = (id) => {
+          const old = oldById.get(id);
+          if (!old) return undefined;
+          if (old.pathKey) return newIdByKey.get(old.pathKey);
+          return newIds.has(id) ? id : undefined;
+        };
+        collapsed = new Set([...collapsed].map((id) => (id.startsWith('type:') ? id : remap(id))).filter(Boolean));
+        if (selectedNodeId !== null) selectedNodeId = remap(selectedNodeId) || null;
       }
       if (msg.quality && msg.quality.suspicious) {
         warningBanner.textContent = '⚠ ' + msg.quality.reasons.join(' ');
@@ -196,8 +212,9 @@
       render({ fit: isNewFile });
       // F5: an open detail panel follows the new graph (old → new values
       // update as you type). A panel the user closed stays closed.
-      if (!detailPanel.classList.contains('hidden') && selectedNodeId !== null) {
-        const selected = currentGraph.nodes.find((n) => n.id === selectedNodeId);
+      // A selected node that was deleted closes the panel.
+      if (!detailPanel.classList.contains('hidden')) {
+        const selected = selectedNodeId !== null && currentGraph.nodes.find((n) => n.id === selectedNodeId);
         if (selected) showDetail(selected);
         else detailPanel.classList.add('hidden');
       }

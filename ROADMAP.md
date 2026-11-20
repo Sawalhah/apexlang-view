@@ -61,7 +61,7 @@ Problem: released README's "Try it" section tells Marketplace users to "open thi
 - Mohammad's step: create an Application Insights resource in Azure (his Microsoft account) and share the connection string (it's designed to be embedded in public extension code).
 
 ### G4. Proposed scope — ⚠ SUPERSEDED: design chose 2 releases. 0.2.0 = telemetry + diff/F1–F10 + **compare with any past commit** + README + grammar tests; 0.3.0 = branch/PR compare + App Map badges + safety warnings
-- **0.2.0 — "trust + diff"**: telemetry (G3) · git diff vs HEAD (built) · fixes F1–F10 · new README + GIF · Ctrl+Alt+L.
+- **0.2.0 — "trust + diff"**: telemetry (G3) · git diff vs HEAD (built) · fixes F1–F10 · new README + GIF · Alt+Shift+L (was Ctrl+Alt+L, see U1).
 - **0.3.0 — "review changes"**: compare any two versions (branch / commit / PR) at component level (D4, upgraded) · App Map changed-page badges (D3) · positioning: "see exactly what changed — by you, a teammate, or an AI agent".
 - **0.4.0 — "safety checks"**: Problems-panel warnings Oracle's validator doesn't cover: broken static-file refs (D1), dangling `@references`, duplicate identifiers, merge collisions between two branches (3-way).
 - **Ongoing**: verify the parser on real 26.2 exports incl. translations (A8); check against Oracle's public grammar once its location is found.
@@ -70,7 +70,7 @@ Problem: released README's "Try it" section tells Marketplace users to "open thi
 
 | # | Item | Status | Notes |
 |---|---|---|---|
-| B1 | README rewrite + demo GIF + `Ctrl+Alt+L` | ✅ | Commit `1b08d0c` (on `feature/git-diff`). |
+| B1 | README rewrite + demo GIF + keyboard shortcut (now `Alt+Shift+L`, U1) | ✅ | Commit `1b08d0c` (on `feature/git-diff`). |
 | B2 | Git diff vs HEAD (toggle, row highlights, old→new in detail panel) | ✅ | Pending merge (A3). |
 | B3 | CHANGELOG corrected | ✅ | Removed entries for the rejected Changes panel / filter. |
 | B4 | Merge `feature/git-diff` → `dev` → `master`/`main` | ⏳ | Waiting on A3 approval. |
@@ -135,6 +135,21 @@ Released code is tagged **`v0.1.0`** (= `c9f84dc`, verified byte-identical to `a
 3. Install that `.vsix` in a clean VS Code profile and click through `TESTING-CHECKLIST.md` with Diff **off** (must look/behave exactly like 0.1.0), then with Diff on.
 4. Merge → `dev` → `main`, push (GitHub now has the GIF), tag `v0.2.0`.
 5. Upload to Marketplace. Rollback if needed: re-upload the kept `apexlang-view-0.1.0.vsix` content as `0.2.1` from tag `v0.1.0`.
+
+## U. Ultrareview of 0.2.0 work (2026-11-20) — fix before releasing 0.2.0
+
+Cloud `/code-review ultra` on `feature/git-diff` (28 files; reference grammars and design doc excluded). All fixed on `feature/git-diff` (not committed yet); tests 90 → 94.
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| U1 | 🟠 Medium | `ctrl+alt+l` = AltGr+L on Windows → users on e.g. Polish layout couldn't type `ł` in `.apx` files. | ✅ Shortcut now `Alt+Shift+L` (Win/Linux), `Cmd+Alt+L` (Mac); README + CHANGELOG updated. **Your call:** different key if you prefer. Check: Alt+Shift is Windows' default layout-switch hotkey; confirm Alt+Shift+L doesn't switch layout on a machine with 2 layouts. |
+| U2 | 🟠 Medium | `trackError` wiped the stack of non-`Error` values (VS Code's `GitError` has no name/stack) → `git.show` / `git.log` errors were always dropped. | ✅ Keeps the call-site stack; name `GitError`; dedupe signature now includes the `where` code. |
+| U3 | 🟠 Medium | VS Code's `TelemetryLogger.logError` may redact the whole path incl. file name → no own frames → every error dropped. Unverified against a real logger. | ✅ `telemetry.js` takes own frames from the original stack and passes them as path-free text (`ownFrames`); sender validates (own file names only) and prefers them. VS Code's own unhandled-error reports still rely on the stack (not changed: our process-wide handlers see every extension, and file-name matching could pick up another extension's `extension.js`). **Still verify** on the VSIX: an error should reach PostHog Error tracking. |
+| U4 | 🟠 Medium | Detail panel / collapsed rows kept by positional node id → adding a block above showed another node's props. | ✅ Extension tags nodes with diff.js `pathKey`; webview carries selection + collapsed rows over by it (external-page stubs, which have stable `ext:<page>` ids, by id); a deleted node closes the panel. |
+| U5 | 🟡 Low | `git.enabled: false` → `getAPI` throws → button said "Diff: HEAD" (= no changes) while failing. | ✅ Treated as no git; any diff failure shows "Diff: failed (see log)". |
+| U6 | 🟡 Low | "Not in commit" check matched git CLI wording only; VS Code's GitError says "Could not show object." → log spam + telemetry per keystroke. | ✅ Also matches `gitErrorCode` FileNotFound/WrongCase and "relative path not found". The generic "Could not show object." is deliberately NOT matched (it covers corrupt objects, locks, …): such a failure is logged + reported once, then cached (U8), so no per-keystroke spam. |
+| U7 | ⚪ Perf | Base file re-parsed on every keystroke with Diff on. | ✅ Parsed base kept in the cache entry. |
+| U8 | ⚪ Perf | Failed base reads not cached → a failing `git show` per edit for uncommitted files. | ✅ Failures cached under the same hash + path; the cache is cleared when Diff is toggled or a commit is picked, so re-toggling retries. |
 
 ## E. Decided against (don't re-propose)
 

@@ -111,6 +111,44 @@ function ownFrames(stack, ownRoot) {
   return frames;
 }
 
+// Frames travel from telemetry.js to the sender through VS Code's logger as
+// text: "file:line:col:function" entries joined by ",". There is no path in
+// it, so VS Code's path redaction leaves it alone. A function name that looks
+// like a secret to VS Code's scrubber (it would redact the whole value) is
+// sent as <anonymous>.
+const SCRUBBER_WORDS = /key|token|sig|secret|password|passwd|pwd/i;
+
+function encodeFrames(frames) {
+  return frames
+    .map((f) => {
+      const fn = SCRUBBER_WORDS.test(f.function) ? '<anonymous>' : f.function;
+      return `${f.filename}:${f.lineno}:${f.colno}:${fn}`;
+    })
+    .join(',');
+}
+
+// Parses encodeFrames' text back into frames. Anything that is not exactly
+// one of our own file names with numeric positions is dropped, so this
+// value cannot carry anything else off the machine.
+function decodeFrames(text) {
+  if (typeof text !== 'string' || !text) return [];
+  const frames = [];
+  for (const part of text.split(',')) {
+    const m = part.match(/^([\w.-]+):(\d{1,7}):(\d{1,7}):(.*)$/);
+    if (!m || !OWN_FILES.has(m[1])) continue;
+    frames.push({
+      platform: 'node:javascript',
+      function: SAFE_FUNCTION.test(m[4]) ? m[4] : '<anonymous>',
+      filename: m[1],
+      lineno: Number(m[2]),
+      colno: Number(m[3]),
+      in_app: true,
+    });
+    if (frames.length >= MAX_FRAMES) break;
+  }
+  return frames;
+}
+
 /**
  * @param {object} opts
  * @param {string} opts.host        PostHog host, e.g. https://eu.i.posthog.com
@@ -210,16 +248,20 @@ function createPostHogSender(opts) {
       dropped('setting off');
       return;
     }
-    const frames = ownFrames(error && error.stack, ownRoot);
+    // Frames taken by telemetry.js before VS Code's path redaction come
+    // first; the stack itself is the fallback (e.g. VS Code's own
+    // unhandled-error reports, which don't pass through trackError).
+    let frames = decodeFrames(data && data.ownFrames);
+    if (frames.length === 0) frames = ownFrames(error && error.stack, ownRoot);
     if (frames.length === 0) {
       dropped('error without own stack frame');
       return;
     }
     const name = cleanFreeText(error && error.name);
-    const signature = `${name}|${frames[0].filename}:${frames[0].lineno}`;
+    const where = data && WHERE_CODES.includes(data.where) ? data.where : 'unhandled';
+    const signature = `${where}|${name}|${frames[0].filename}:${frames[0].lineno}`;
     if (sentErrors.has(signature)) return;
     sentErrors.add(signature);
-    const where = data && WHERE_CODES.includes(data.where) ? data.where : 'unhandled';
     enqueue(ERROR_EVENT, {
       where,
       $exception_list: [{ type: name, value: name, stacktrace: { type: 'raw', frames } }],
@@ -248,4 +290,4 @@ function createPostHogSender(opts) {
   return { sendEventData, sendErrorData, flush };
 }
 
-module.exports = { createPostHogSender, ownFrames, stripPrefix, MAX_EVENTS_PER_SESSION, BATCH_SIZE };
+module.exports = { createPostHogSender, ownFrames, encodeFrames, decodeFrames, stripPrefix, MAX_EVENTS_PER_SESSION, BATCH_SIZE };

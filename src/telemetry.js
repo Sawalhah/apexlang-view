@@ -5,7 +5,7 @@
 
 const vscode = require('vscode');
 const crypto = require('crypto');
-const { createPostHogSender } = require('./posthog-sender');
+const { createPostHogSender, ownFrames, encodeFrames } = require('./posthog-sender');
 
 // PostHog EU Cloud (Frankfurt), project "APEXLang View" (id 359325); region
 // changed from US to EU by the author on 2026-11-20. The project key is
@@ -18,6 +18,7 @@ const ANON_ID_KEY = 'apexlangView.anonId';
 
 let logger = null;
 let sender = null;
+let ownRoot = null;
 // "First use per panel session": the only place repeats are removed.
 // Cleared when the panel is (re)created.
 const seenThisPanel = new Set();
@@ -46,6 +47,7 @@ function initTelemetry(context, log) {
     distinctId = crypto.randomUUID();
     context.globalState.update(ANON_ID_KEY, distinctId);
   }
+  ownRoot = context.extensionPath;
   const packageJSON = (context.extension && context.extension.packageJSON) || {};
   sender = createPostHogSender({
     host: POSTHOG_HOST,
@@ -81,11 +83,27 @@ function track(name, props, oncePerPanel) {
 
 // Sends an error event: only its name, the `where` code, and our own stack
 // frames leave the machine (see posthog-sender.js).
+//
+// Not everything thrown is an Error: VS Code's git extension throws a
+// GitError that has no name and no stack. Such values get a fresh Error
+// (whose stack is this call site), keeping their own name/stack only when
+// they have one.
+//
+// VS Code's logger may replace every file path in the stack, file name
+// included, with "<REDACTED: user-file-path>" before our sender sees it.
+// So our own frames are taken here, from the original stack, and passed
+// along as text with no paths in it (see encodeFrames).
 function trackError(where, err) {
   if (!logger || !err) return;
   try {
-    const error = err instanceof Error ? err : Object.assign(new Error('error'), { name: err.name, stack: err.stack });
-    logger.logError(error, { where });
+    let error = err;
+    if (!(err instanceof Error)) {
+      error = new Error('error');
+      error.name = typeof err.name === 'string' && err.name ? err.name : err.gitErrorCode ? 'GitError' : 'Error';
+      if (typeof err.stack === 'string' && err.stack) error.stack = err.stack;
+    }
+    const frames = ownFrames(error.stack, ownRoot).filter((f) => f.filename !== 'telemetry.js');
+    logger.logError(error, { where, ownFrames: encodeFrames(frames) });
   } catch {
     // telemetry must never break the extension
   }

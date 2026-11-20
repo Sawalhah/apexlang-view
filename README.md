@@ -28,7 +28,7 @@ View Oracle APEX `.apx` (APEXLang) files as a collapsible component tree in VS C
 
 | Command | Shortcut | Description |
 |---|---|---|
-| `APEXLang View: Open Graph View` | `Ctrl+Alt+L` (`Cmd+Alt+L` on Mac) | Opens/toggles the view for the active file |
+| `APEXLang View: Open Graph View` | `Alt+Shift+L` (`Cmd+Alt+L` on Mac) | Opens/toggles the view for the active file |
 | `APEXLang View: Switch File` | — | Quick-pick a different `.apx` file |
 | `APEXLang View: Open App Map` | — | Shows the page-to-page navigation map for the whole app |
 | `APEXLang View: Toggle Diff vs HEAD` | — | Highlights nodes changed since your last commit |

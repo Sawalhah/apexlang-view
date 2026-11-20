@@ -3,7 +3,7 @@ const path = require('path');
 const { parseApxToGraph, assessParseQuality } = require('./parser');
 const { guessAppRoot, buildPageIndex, injectNavStubs } = require('./page-nav');
 const { buildAppMap } = require('./app-map');
-const { diffGraphs } = require('./diff');
+const { diffGraphs, buildPathIndex } = require('./diff');
 const { initTelemetry, track, trackError, resetPanelSession, flushTelemetry } = require('./telemetry');
 const { sizeBucket, msBucket, nodeBucket } = require('./telemetry-schema');
 
@@ -68,7 +68,15 @@ async function getGitApi() {
   const gitExtension = vscode.extensions.getExtension('vscode.git');
   if (!gitExtension) return null;
   const exports = gitExtension.isActive ? gitExtension.exports : await gitExtension.activate();
-  const api = exports.getAPI(1);
+  // With "git.enabled": false (or no git installed) getAPI throws; treat
+  // that the same as having no git at all.
+  if (!exports || exports.enabled === false) return null;
+  let api;
+  try {
+    api = exports.getAPI(1);
+  } catch {
+    return null;
+  }
   if (api.state && api.state !== 'initialized' && typeof api.onDidChangeState === 'function') {
     if (!gitReadyWait) {
       gitReadyWait = new Promise((resolve) => {
@@ -90,11 +98,13 @@ async function getGitApi() {
   return api;
 }
 
-// The base text for the diff, cached so live typing does no git work after
-// the first read. Keyed by the RESOLVED commit hash (never the moving name
-// 'HEAD'), so an entry can never go stale: a new commit means a new hash and
-// a cache miss. Only one entry is kept (the current file); replaced on miss.
-let baseCache = null; // { hash, path, text }
+// The base for the diff, cached so live typing does no git work (and no
+// second parse) after the first read. Keyed by the RESOLVED commit hash
+// (never the moving name 'HEAD'), so an entry can never go stale: a new
+// commit means a new hash and a cache miss. Failed reads are cached too, so
+// an uncommitted file doesn't spawn a failing `git show` on every edit.
+// Only one entry is kept (the current file); replaced on miss.
+let baseCache = null; // { hash, path, text, graph? } or { hash, path, reason }
 
 // Each "why there is no diff" reason is logged once per file + ref instead
 // of on every keystroke (F6).
@@ -106,14 +116,22 @@ function logDiffReasonOnce(uri, ref, reason, detail) {
   log(`Diff vs ${refLabel(ref)} unavailable for ${path.basename(uri.fsPath)}: ${reason}${detail ? ' (' + detail + ')' : ''}`);
 }
 
-// git reports a file missing at a commit as "path ... does not exist in
-// '<ref>'" or "... exists on disk, but not in '<ref>'".
+// The expected ways a read fails when the file is not at that commit. The
+// git CLI says "path ... does not exist in '<ref>'" or "... exists on disk,
+// but not in '<ref>'"; VS Code's git extension may instead throw a GitError
+// with gitErrorCode FileNotFound/WrongCase, or "Git relative path not found."
+// after its wrong-case retry. Its generic "Could not show object." is NOT
+// matched: it covers any failed read (corrupt object, lock, ...), and those
+// are logged and reported once (the failure is cached, see baseCache).
 function isPathNotInCommitError(err) {
-  const text = `${err && err.message ? err.message : ''} ${err && err.stderr ? err.stderr : ''}`;
-  return /does not exist in|exists on disk, but not in/i.test(text);
+  if (!err) return false;
+  const text = `${err.message || ''} ${err.stderr || ''}`;
+  if (/does not exist in|exists on disk, but not in|relative path not found/i.test(text)) return true;
+  return err.gitErrorCode === 'WrongCase' || err.gitErrorCode === 'FileNotFound';
 }
 
-// Returns { text } — the file's content at `ref` ('HEAD' or a commit hash) —
+// Returns the cache entry: { text } — the file's content at `ref` ('HEAD' or
+// a commit hash; the caller may keep the parsed base on it as `graph`) —
 // or { reason } explaining why there is nothing to diff against:
 //   noRepo      — no git extension, or the file is not in a repository
 //   untracked   — compared with HEAD, but the file is not committed yet
@@ -137,12 +155,12 @@ async function getContentAtRef(uri, ref) {
     return { reason: 'notInCommit' };
   }
   if (baseCache && baseCache.hash === hash && baseCache.path === uri.fsPath) {
-    return { text: baseCache.text };
+    return baseCache;
   }
   try {
     const text = await repository.show(hash, uri.fsPath);
     baseCache = { hash, path: uri.fsPath, text };
-    return { text };
+    return baseCache;
   } catch (err) {
     // Whatever git's wording, a failed read at HEAD means "not committed
     // yet" and at a chosen commit means "not in that commit", so the button
@@ -154,7 +172,8 @@ async function getContentAtRef(uri, ref) {
       logError(`getContentAtRef: repository.show(${refLabel(ref)}) failed for ${uri.fsPath}`, err);
       trackError('git.show', err);
     }
-    return { reason };
+    baseCache = { hash, path: uri.fsPath, reason };
+    return baseCache;
   }
 }
 
@@ -357,6 +376,8 @@ async function switchFileCommand(context) {
 // off -> compare with HEAD. Re-renders the current file.
 async function toggleDiffCommand() {
   track('command', { name: 'toggleDiff' });
+  // Re-toggling is the user's retry: forget a cached (possibly transient) failure.
+  baseCache = null;
   diffRef = diffRef ? null : 'HEAD';
   log(diffRef ? 'Diff vs HEAD: on' : 'Diff: off');
   if (currentUri) await refresh(currentUri);
@@ -372,8 +393,13 @@ async function compareWithCommitCommand() {
     return;
   }
   const uri = currentUri;
-  const git = await getGitApi();
-  const repository = git && git.getRepository(uri);
+  let repository = null;
+  try {
+    const git = await getGitApi();
+    repository = git && git.getRepository(uri);
+  } catch (err) {
+    logError('compareWithCommit: git is not available', err);
+  }
   if (!repository) {
     vscode.window.showInformationMessage('APEXLang View: this file is not in a git repository.');
     return;
@@ -408,6 +434,7 @@ async function compareWithCommitCommand() {
   if (!picked) return;
   if (!panel || !currentUri || currentUri.toString() !== uri.toString()) return;
 
+  baseCache = null;
   diffRef = picked.hash;
   log(`Diff vs ${refLabel(diffRef)}: on`);
   await refresh(currentUri);
@@ -616,16 +643,25 @@ async function refresh(uri) {
       if (base.reason) {
         diffStatus.reason = base.reason;
       } else {
-        const baseGraph = parseApxToGraph(base.text);
+        // The base never changes for a cached hash, so it is parsed once.
+        // diffGraphs does not modify either graph.
+        if (!base.graph) base.graph = parseApxToGraph(base.text);
         // removedInfo is not used by the webview (F10); keep the message small.
-        const { removedInfo, ...forWebview } = diffGraphs(baseGraph, graph);
+        const { removedInfo, ...forWebview } = diffGraphs(base.graph, graph);
         diff = forWebview;
       }
     } catch (err) {
+      // The button must not read "Diff: HEAD" (no changes) when the diff failed.
+      diffStatus.reason = 'error';
       logError(`refresh(${fileName}): diff vs ${refLabel(ref)} failed`, err);
       trackError('refresh.diff', err);
     }
   }
+
+  // Node ids are positional (n0, n1, ...) and shift when a block is added
+  // above; the webview keeps its selection and collapsed rows by this
+  // structural key instead, so a live edit can't move them to another node.
+  for (const [key, node] of buildPathIndex(graph)) node.pathKey = key;
 
   const quality = assessParseQuality(text, graph);
   const ms = Date.now() - startedAt;

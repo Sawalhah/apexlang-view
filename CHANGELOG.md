@@ -21,7 +21,7 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   changed on the selected node, including properties that were removed.
 - The Diff button says why there is nothing to compare: "Diff: not
   tracked", "Diff: no git", or "Diff: not in a1b2c3d".
-- `Ctrl+Alt+L` / `Cmd+Alt+L` opens the view for the active `.apx` file.
+- `Alt+Shift+L` / `Cmd+Alt+L` opens the view for the active `.apx` file.
 - Anonymous usage and error data (see "Privacy" in the README and
   `telemetry.json`). Respects VS Code's telemetry setting; can also be
   turned off with `apexlangView.telemetry.enabled`.

@@ -106,7 +106,10 @@ occupies.
     has no expiry as of 2026-11, includes 1M events/month, and its dashboards
     need no query writing. Azure Application Insights and Grafana Cloud were
     rejected (Alternatives C and D).
-    *   **Region: US (PostHog US Cloud)**, chosen at sign-up. Switching to EU
+    *   **Region: EU (PostHog EU Cloud, Frankfurt)**, project "APEXLang
+        View" (id 359325). Changed from US by the author on 2026-11-20 during
+        the build (a new EU-cloud organization; no data had been sent yet).
+        Originally: US, chosen at sign-up. Switching to EU
         later means a new EU-cloud organization and a new key, with no data
         migration.
     *   **Volume:** ~232 installs × ~2 sessions/day × ~15 events ≈ 7,000
@@ -279,7 +282,7 @@ it; a *VS Code session* is the lifetime of one VS Code window.
  │    - queue → HTTPS POST (Node https module)
  └──────────────┬───────────────┘
                 v
-        PostHog US Cloud (free plan): dashboards for users, features, errors
+        PostHog EU Cloud (free plan): dashboards for users, features, errors
 ```
 
 **1. Telemetry (G1).**
@@ -335,7 +338,7 @@ it; a *VS Code session* is the lifetime of one VS Code window.
 
 *   Rate cap: at most 200 events per VS Code session; further events are
     dropped.
-*   The PostHog US host and public project key are constants in
+*   The PostHog EU host and public project key are constants in
     `src/telemetry.js`.
 
 **2. Diff vs HEAD hardening (G3).** Fix F1–F10 from ROADMAP section F, inside
@@ -747,7 +750,7 @@ by file; this is the order to build them in.
 
 *   **Type / Scope**: VS Code-side wrapper.
 *   **Proposed Changes**:
-    *   Constants `POSTHOG_HOST = 'https://us.i.posthog.com'` (US region,
+    *   Constants `POSTHOG_HOST = 'https://eu.i.posthog.com'` (EU region,
         decided) and `POSTHOG_PROJECT_KEY` (public `phc_` key; a placeholder
         until shared).
     *   `initTelemetry(context, log)`: if the key is still the placeholder,

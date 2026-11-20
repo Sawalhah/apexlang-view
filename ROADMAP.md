@@ -157,3 +157,4 @@ Released code is tagged **`v0.1.0`** (= `c9f84dc`, verified byte-identical to `a
 | 2026-11-19 | EGM review Stage 7: 26 fixes auto-accepted (jsdom dropped, property allowlist, sender-level off switch, Risks section, 0.3.0 decision rule) | See docs/review/goldfish_review_report.md |
 | 2026-11-20 | Parser fixes in 0.2.0 found by the grammar tests: `$` in names (`APEX$ROW_ACTION` showed as a bogus `ROW_ACTION` type), `/* */` comments that start a line, escapes in quoted names | Small, tested; only 30 of 2,228 corpus files parse differently from 0.1.0, all from `$` names |
 | 2026-11-20 | Corpus test widened from `sample-apps` (1,263 files, 11 suspicious) to all of `apex-apps` (2,228 files, 16 suspicious) | The design's 2,228 count was the whole tree |
+| 2026-11-20 | Telemetry region changed US → EU (PostHog EU Cloud, project "APEXLang View", id 359325, IP discard on) | Author's choice before any data was sent; EU keeps data in Frankfurt |

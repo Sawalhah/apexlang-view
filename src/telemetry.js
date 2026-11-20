@@ -7,11 +7,13 @@ const vscode = require('vscode');
 const crypto = require('crypto');
 const { createPostHogSender } = require('./posthog-sender');
 
-// PostHog US Cloud (region decided 2026-11-19). The project key is PostHog's
-// public, send-only key, designed to be embedded in client code. While it is
-// the placeholder, telemetry is not created and nothing is sent.
-const POSTHOG_HOST = 'https://us.i.posthog.com';
-const POSTHOG_PROJECT_KEY = 'phc_PLACEHOLDER';
+// PostHog EU Cloud (Frankfurt), project "APEXLang View" (id 359325); region
+// changed from US to EU by the author on 2026-11-20. The project key is
+// PostHog's public, write-only project token, designed to be embedded in
+// client code (it cannot read any data). If it is ever replaced by a value
+// that is not a phc_ key, telemetry is not created and nothing is sent.
+const POSTHOG_HOST = 'https://eu.i.posthog.com';
+const POSTHOG_PROJECT_KEY = 'phc_q2UEPLtsuUzNS26kybmtaGpc4yXRx5vpQRHgBhumZqpn';
 const ANON_ID_KEY = 'apexlangView.anonId';
 
 let logger = null;

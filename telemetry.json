@@ -1,5 +1,5 @@
 {
-  "description": "Every anonymous telemetry event APEXLang View can send, and every property it can carry. Nothing else is sent. Sending stops when VS Code's telemetry setting (telemetry.telemetryLevel) is off or when apexlangView.telemetry.enabled is false. Data goes to PostHog US Cloud, with IP addresses discarded. The user is identified only by a random ID created by this extension; never by machine ID, account, file names, paths, page or component names, .apx content, git data, or error message text.",
+  "description": "Every anonymous telemetry event APEXLang View can send, and every property it can carry. Nothing else is sent. Sending stops when VS Code's telemetry setting (telemetry.telemetryLevel) is off or when apexlangView.telemetry.enabled is false. Data goes to PostHog EU Cloud (Frankfurt), with IP addresses discarded. The user is identified only by a random ID created by this extension; never by machine ID, account, file names, paths, page or component names, .apx content, git data, or error message text.",
   "commonProperties": {
     "extVersion": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "Extension version, e.g. 0.2.0." },
     "vscodeVersion": { "classification": "SystemMetaData", "purpose": "PerformanceAndHealth", "comment": "VS Code version, e.g. 1.96.0." },

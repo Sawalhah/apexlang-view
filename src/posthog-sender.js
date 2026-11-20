@@ -99,7 +99,7 @@ function ownFrames(stack, ownRoot) {
 
 /**
  * @param {object} opts
- * @param {string} opts.host        PostHog host, e.g. https://us.i.posthog.com
+ * @param {string} opts.host        PostHog host, e.g. https://eu.i.posthog.com
  * @param {string} opts.key         public project key (phc_…)
  * @param {string} opts.distinctId  random per-install ID
  * @param {{extVersion:string, vscodeVersion:string, os:string}} opts.common

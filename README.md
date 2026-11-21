@@ -6,6 +6,13 @@ See an Oracle APEX `.apx` page as a tree in VS Code, so you don't have to scroll
 
 ![APEXLang View showing a page tree, with a changed button and its old and new label](media/screenshot.png)
 
+## New in 0.2.0
+
+- **Diff.** Click the Diff button and the tree marks what you changed since your last commit: yellow for changed, green for new. Click a yellow row and the details panel shows the old value next to the new one.
+- **Compare with an older commit.** The ▾ next to Diff lists the last 50 commits that touched the file. Pick one to see what changed since then.
+- `Alt+Shift+L` opens the view (`Cmd+Alt+L` on Mac).
+- A few parser fixes, mostly for Interactive Grid columns like `APEX$ROW_ACTION`. The full list is in the [changelog](CHANGELOG.md).
+
 ## How to use it
 
 Open any `.apx` file and press `Alt+Shift+L` (`Cmd+Alt+L` on Mac), or run **APEXLang View: Open Graph View**.
@@ -17,7 +24,7 @@ You can also:
 - search by name, type or property value
 - group the page by component type, or see it as a graph
 - open the App Map to see which page links to which across the whole app
-- turn on **Diff** to mark what changed since your last commit (yellow is changed, green is new), with old and new values in the details panel. The ▾ next to it compares with an older commit.
+- turn on Diff to see what changed since a commit
 
 ## Privacy
 

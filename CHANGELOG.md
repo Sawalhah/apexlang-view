@@ -3,7 +3,7 @@
 All notable changes to APEXLang View are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.2.0] — Unreleased
+## [0.2.0] — 2026-11-21
 
 ### Added
 
@@ -28,7 +28,7 @@ follows [Keep a Changelog](https://keepachangelog.com/).
 - Parser tested against Oracle's published APEXlang grammar (26.1 and 26.2)
   and all 2,228 files of Oracle's APEX 26.1 sample, starter, and utility
   apps.
-- README rewritten for users, with a demo GIF.
+- Shorter README with a screenshot.
 
 ### Fixed
 

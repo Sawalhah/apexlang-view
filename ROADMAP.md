@@ -38,6 +38,7 @@ Last updated: 2026-11-19 — **approved design: [docs/DESIGN-v0.2-v0.3.md](docs/
 | A19 | Senior-developer review before his manual test | ✅ | Advisor review 2026-11-20: telemetry off in F5/test runs (Production mode only); wire-format check (above); checklist §13 highest-risk git cases + §14 VSIX-only; stale US/placeholder docs fixed; `telemetry.json` must be on GitHub `main` before upload. |
 | A20 | Run /ultrareview | ✅ | Findings U1–U8 fixed (c213e2d), tests 94/94. |
 | A21 | Manual test of 0.2.0 (installed VSIX, clean profile) | ✅ | 2026-11-21: Diff + Compare with Commit, telemetry events and error tracking verified in PostHog EU (no paths/names), Alt+Shift+L, stable selection/collapse, git off. |
+| A23 | README rewrite (short, human tone, one real screenshot; dev notes moved to docs/DEVELOPMENT.md) | 🔨 | 2026-11-21, his request "github readme was shit in v1". |
 | A22 | Release 0.2.0 (merge to dev → main, push, publish) | 🔨 | 2026-11-21: dev + main fast-forwarded to b33370b and pushed, tag v0.2.0 pushed; telemetry.json + demo.gif live on main. Marketplace upload: Mohammad. |
 | A17 | Save the session so resuming needs no searching | ✅ | Pointer added to `MaksabStudio/CLAUDE.md` section 6 (loaded every session) + memory `apexlang_view_resume_point.md`. Resume: start Claude in `MaksabStudio`, type "continue". |
 

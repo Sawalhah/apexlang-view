@@ -181,10 +181,14 @@ The log shows `telemetry: off in development/test runs` under F5.
       `telemetry: dropped: error without own stack frame` right after an
       error from this extension, error reporting is broken (VS Code may be
       hiding the file paths); report it.
-- [ ] Error reaches PostHog (U3): turn Diff on with `git.enabled: false`
-      set (the button reads "Diff: no git"), or force any parse error; after
-      ~30 s the `$exception` shows in PostHog → Error tracking with
-      `extension.js` / `parser.js` frames and no paths.
+- [ ] Error reaches PostHog (U3). Normal use doesn't produce errors
+      (`git.enabled: false` is handled, not an error), so fake one: with
+      the panel open, run **Developer: Open Webview Developer Tools**, pick
+      the panel's frame in the console's context dropdown, and run
+      `setTimeout(() => { const e = new TypeError('test'); e.stack = 'TypeError: test\n    at renderTree (graph.js:120:7)'; throw e; })`.
+      The log shows `Webview error: …`; after ~30 s a `TypeError` shows in
+      PostHog → Error tracking with frame `graph.js` line 120, where
+      `webview.render`, and no paths or message text.
 
 ## 15. Ultrareview fixes (2026-11-20)
 - [ ] `Alt+Shift+L` (Win/Linux) / `Cmd+Alt+L` (Mac) opens the view for the
